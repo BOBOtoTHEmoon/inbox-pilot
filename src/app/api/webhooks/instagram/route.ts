@@ -84,7 +84,7 @@ async function handleMessagingEvent(event: IGMessagingEvent, igAccountId: string
 
   if (!messageText && !event.message?.attachments) return;
 
-  console.log(`[Webhook] DM from ${event.sender.id}: "${messageText}"`);
+  console.log(`[Webhook] Looking up business with IG account ID: ${igAccountId}`);
 
   // 1. Find the business by IG account ID
   const { data: business } = await supabaseAdmin
