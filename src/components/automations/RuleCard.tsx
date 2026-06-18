@@ -88,7 +88,7 @@ export function RuleCard({ rule, onEdit, onToggle, onDelete }: RuleCardProps) {
 
             {/* Stats */}
             <div className="mt-2 flex items-center gap-3 text-[11px] text-ink-muted">
-              <span>Triggered {rule.stats?.triggered_count ?? rule.triggered_count ?? 0} times</span>
+              <span>Triggered {rule.stats?.triggered_count ?? (rule as any).triggered_count ?? 0} times</span>
               <span>·</span>
               <span>Priority {rule.priority}</span>
               <span>·</span>
