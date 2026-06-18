@@ -36,15 +36,12 @@ export async function POST(request: NextRequest) {
   try {
     const body: IGWebhookEvent = await request.json();
 
-    // Always respond 200 quickly — Meta retries on failure
-    // Process asynchronously
-    handleWebhookEvent(body).catch((err) => {
-      console.error('[Webhook] Processing error:', err);
-    });
+    // Process BEFORE returning response (Vercel kills async work after response)
+    await handleWebhookEvent(body);
 
     return NextResponse.json({ status: 'ok' }, { status: 200 });
   } catch (error) {
-    console.error('[Webhook] Parse error:', error);
+    console.error('[Webhook] Processing error:', error);
     return NextResponse.json({ status: 'ok' }, { status: 200 });
   }
 }
