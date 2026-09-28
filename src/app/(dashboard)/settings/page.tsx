@@ -41,8 +41,12 @@ export default function SettingsPage() {
     });
     const json = await res.json().catch(() => ({}));
     setImporting(false);
-    if (!res.ok) {
-      setImportMessage(json.error || 'Import failed');
+        if (!res.ok) {
+      setImportMessage(
+        res.status === 504
+          ? 'The import took too long, but everything it finished was saved. Click again to continue.'
+          : json.error || 'Import failed'
+      );
       return;
     }
     setImportMessage(

@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMessages } from '@/hooks/useMessages';
 import { clsx } from 'clsx';
-import { Send, Bot, Zap, Paperclip, Smile } from 'lucide-react';
+import { Send, Bot, Zap, Paperclip, Smile, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Conversation } from '@/types';
+import { getReplyWindowText } from '@/lib/labels';
 
 interface MessageThreadProps {
   conversation: Conversation;
@@ -57,6 +58,15 @@ export function MessageThread({ conversation, businessId }: MessageThreadProps) 
       handleSend();
     }
   };
+
+    // Instagram only lets apps reply within 24 hours of the customer's last message
+  const windowClosed =
+    !conversation.last_customer_message_at ||
+    getReplyWindowText(conversation) === 'Reply window closed';
+  const instagramLink =
+    conversation.customer_username && conversation.customer_username !== 'unknown'
+      ? `https://ig.me/m/${conversation.customer_username}`
+      : 'https://www.instagram.com/direct/inbox/';
 
   if (loading) {
     return (
@@ -158,42 +168,61 @@ export function MessageThread({ conversation, businessId }: MessageThreadProps) 
         })}
       </div>
 
-      {/* Composer */}
-      <div className="border-t border-border p-3">
-        <div className="flex items-end gap-2 rounded-xl border border-border bg-surface-raised p-2 focus-within:border-accent transition-colors">
-          <textarea
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
-            rows={1}
-            className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-ink-muted"
-            style={{
-              minHeight: '36px',
-              maxHeight: '120px',
-              height: 'auto',
-            }}
-            onInput={(e) => {
-              const target = e.target as HTMLTextAreaElement;
-              target.style.height = 'auto';
-              target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-            }}
-          />
-          <button
-            onClick={handleSend}
-            disabled={!draft.trim() || sending}
-            className={clsx(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors',
-              draft.trim() && !sending
-                ? 'bg-accent text-white hover:bg-accent-hover'
-                : 'bg-surface-overlay text-ink-muted'
-            )}
-          >
-            <Send className="h-4 w-4" />
-          </button>
+      {/* Composer, or a notice when Instagram's reply window has closed */}
+      {windowClosed ? (
+        <div className="border-t border-border p-3">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3">
+            <p className="text-xs text-ink-muted">
+              Instagram only lets apps reply within 24 hours of the customer&apos;s last message.
+              You can still reply in the Instagram app, and your reply will show up here.
+            </p>
+            <a
+              href={instagramLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white hover:bg-accent-hover transition-colors"
+            >
+              Open in Instagram <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
         </div>
-      </div>
-    </>
+      ) : (
+        <div className="border-t border-border p-3">
+          <div className="flex items-end gap-2 rounded-xl border border-border bg-surface-raised p-2 focus-within:border-accent transition-colors">
+            <textarea
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
+              rows={1}
+              className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-ink-muted"
+              style={{
+                minHeight: '36px',
+                maxHeight: '120px',
+                height: 'auto',
+              }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+              }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!draft.trim() || sending}
+              className={clsx(
+                'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors',
+                draft.trim() && !sending
+                  ? 'bg-accent text-white hover:bg-accent-hover'
+                  : 'bg-surface-overlay text-ink-muted'
+              )}
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+      </>
   );
 }

@@ -1,11 +1,4 @@
-// ============================================
-// GET /api/auth/instagram/callback
-// Instagram sends the user back here after they tap "Allow".
-// We swap the code for a 60-day token, find the account, turn on
-// DM webhooks for it, and save everything on the business.
-// ============================================
-
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getLongLivedToken } from '@/lib/instagram';
 import { getAppUrl, getRedirectUri, readState } from '@/lib/instagram-connect';
@@ -111,17 +104,19 @@ export async function GET(request: NextRequest) {
       .eq('id', state.businessId);
         if (saveError) throw new Error(`Saving failed: ${saveError.message}`);
 
-    // 7. Bring in recent DMs so the inbox isn't empty on day one.
-    //    If this fails, the account is still connected; it can be re-run from Settings.
-    let imported = 0;
-    try {
-      const result = await importRecentConversations(state.businessId);
-      imported = result.conversations;
-    } catch (importErr: any) {
-      await logError(`Import after connect failed: ${String(importErr?.message || importErr)}`);
-    }
+        // 7. Bring in recent DMs in the background, so the person sees
+    //    "connected" straight away instead of waiting for the import.
+    //    If it fails, the account is still connected; it can be re-run from Settings.
+    const businessId = state.businessId;
+    after(async () => {
+      try {
+        await importRecentConversations(businessId);
+      } catch (importErr: any) {
+        await logError(`Import after connect failed: ${String(importErr?.message || importErr)}`);
+      }
+    });
 
-    return finish({ username: me.username, imported: String(imported) });
+    return finish({ username: me.username, importing: '1' });
   } catch (err: any) {
     const message = String(err?.message || err);
     console.error('[Instagram connect]', message);

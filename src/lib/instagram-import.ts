@@ -1,11 +1,3 @@
-// ============================================
-// IMPORT RECENT INSTAGRAM DMs
-// Pulls a business's recent conversations from Instagram so the inbox
-// isn't empty right after connecting. Instagram only allows reading the
-// 20 most recent messages of each conversation.
-// Safe to run more than once: messages already saved are skipped.
-// ============================================
-
 import { supabaseAdmin } from '@/lib/supabase';
 import { getInstagramProfile } from '@/lib/instagram';
 
@@ -98,11 +90,11 @@ export async function importRecentConversations(
     next = page?.paging?.next || null;
   }
 
-  // 2. Import each conversation
-  for (const igConversationId of conversationIds) {
+   // 2. Import one conversation
+  const importOne = async (igConversationId: string) => {
     try {
       const messages = await getConversationMessages(igConversationId, token);
-      if (messages.length === 0) continue;
+      if (messages.length === 0) return;
 
       // Work out who the customer is
       let customer: { id: string; username?: string } | undefined;
@@ -117,7 +109,7 @@ export async function importRecentConversations(
           break;
         }
       }
-      if (!customer) continue;
+      if (!customer) return;
 
       // Find or create the conversation
       let { data: conversation } = await supabaseAdmin
@@ -204,6 +196,12 @@ export async function importRecentConversations(
     } catch (err: any) {
       result.errors.push(`${igConversationId}: ${String(err?.message || err)}`);
     }
+  };
+
+  // 3. Run several conversations at a time, so big inboxes finish quickly
+  const BATCH_SIZE = 6;
+  for (let i = 0; i < conversationIds.length; i += BATCH_SIZE) {
+    await Promise.all(conversationIds.slice(i, i + BATCH_SIZE).map(importOne));
   }
 
   if (result.errors.length > 0) {

@@ -7,11 +7,10 @@ import { Check, X } from 'lucide-react';
 export default async function ConnectedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ username?: string; error?: string; imported?: string }>;
+    searchParams: Promise<{ username?: string; error?: string; importing?: string }>;
 }) {
-  const { username, error, imported } = await searchParams;
+  const { username, error, importing } = await searchParams;
   const ok = !!username && !error;
-  const importedCount = Number(imported || 0);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-raised px-4">
@@ -28,9 +27,9 @@ export default async function ConnectedPage({
         </h1>
         <p className="mt-2 text-sm text-ink-muted">
           {ok
-            ? `@${username} is now connected.${
-                importedCount > 0 ? ` ${importedCount} recent conversations were imported.` : ''
-              } New DMs will appear in the inbox.`
+                        ? `@${username} is now connected.${
+                importing ? ' Recent conversations are being imported and will appear in the inbox within a minute.' : ''
+              } New DMs will appear there too.`
             : error || 'Something went wrong. Please try again.'}
         </p>
 
