@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Bot, User, X, Tag, UserCheck, ExternalLink } from 'lucide-react';
 import { useConversations } from '@/hooks/useConversations';
 import type { Conversation } from '@/types';
@@ -24,10 +25,13 @@ export function ConversationHeader({
     }
   };
 
-  // Mark as read when header is rendered (conversation is open)
-  if (!conversation.is_read) {
-    markAsRead(conversation.id);
-  }
+  // Mark as read once when the conversation is opened
+  useEffect(() => {
+    if (!conversation.is_read) {
+      markAsRead(conversation.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.id]);
 
   return (
     <div className="flex h-14 items-center justify-between border-b border-border px-4">

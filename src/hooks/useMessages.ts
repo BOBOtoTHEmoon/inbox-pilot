@@ -39,7 +39,7 @@ export function useMessages(conversationId: string | null) {
     if (!conversationId || !isSupabaseConfigured) return;
 
     const channel = supabase
-      .channel(`messages:${conversationId}`)
+      .channel(`messages:${conversationId}:${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'messages',
         filter: `conversation_id=eq.${conversationId}`,

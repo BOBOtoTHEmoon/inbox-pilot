@@ -49,7 +49,8 @@ export function useConversations({ businessId, status = 'open' }: UseConversatio
     if (!isSupabaseConfigured) return;
 
     const channel = supabase
-      .channel(`conversations:${businessId}`)
+      // Unique name per hook instance: two components using this hook must not share a channel
+      .channel(`conversations:${businessId}:${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'conversations',
         filter: `business_id=eq.${businessId}`,

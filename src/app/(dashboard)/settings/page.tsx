@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   Instagram,
   ShoppingBag,
@@ -16,6 +17,27 @@ const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID || 'demo';
 
 export default function SettingsPage() {
   const [syncing, setSyncing] = useState(false);
+  const [igUsername, setIgUsername] = useState<string | null>(null);
+  const [shopifyStore, setShopifyStore] = useState<string | null>(null);
+  const [loadingBusiness, setLoadingBusiness] = useState(true);
+
+  // Load the real connected accounts for this business
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoadingBusiness(false);
+      return;
+    }
+    supabase
+      .from('businesses')
+      .select('instagram_username, shopify_store_url')
+      .eq('id', BUSINESS_ID)
+      .maybeSingle()
+      .then(({ data }) => {
+        setIgUsername(data?.instagram_username || null);
+        setShopifyStore(data?.shopify_store_url || null);
+        setLoadingBusiness(false);
+      });
+  }, []);
   const [businessHoursStart, setBusinessHoursStart] = useState('09:00');
   const [businessHoursEnd, setBusinessHoursEnd] = useState('18:00');
   const [awayMessage, setAwayMessage] = useState(
@@ -59,10 +81,20 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="rounded-lg bg-success-light border border-success/20 px-4 py-3 flex items-center gap-2">
-            <Check className="h-4 w-4 text-success" />
-            <span className="text-sm text-success">Connected as @auraupstore</span>
-          </div>
+          {loadingBusiness ? (
+            <div className="rounded-lg bg-surface-overlay px-4 py-3 text-sm text-ink-muted">
+              Checking connection...
+            </div>
+          ) : igUsername ? (
+            <div className="rounded-lg bg-success-light border border-success/20 px-4 py-3 flex items-center gap-2">
+              <Check className="h-4 w-4 text-success" />
+              <span className="text-sm text-success">Connected as @{igUsername}</span>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-surface-overlay px-4 py-3 text-sm text-ink-muted">
+              No Instagram account connected
+            </div>
+          )}
 
           <div className="mt-3 flex gap-2">
             <a
@@ -105,7 +137,9 @@ export default function SettingsPage() {
           <div className="rounded-lg bg-surface-overlay px-4 py-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-ink-muted">Store</span>
-              <span className="font-medium">auraupstore.myshopify.com</span>
+              <span className="font-medium">
+                {loadingBusiness ? '...' : shopifyStore || 'Not connected'}
+              </span>
             </div>
           </div>
         </section>
