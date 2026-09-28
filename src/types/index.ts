@@ -34,7 +34,9 @@ export interface Conversation {
   status: 'open' | 'closed' | 'snoozed';
   assigned_to: 'bot' | 'human';
   last_message_at: string;
-  last_message_preview: string;
+    last_message_preview: string;
+  last_sender_type?: 'customer' | 'bot' | 'human' | null;
+  last_customer_message_at?: string | null;
   is_read: boolean;
   tags: string[];
   customer_email: string | null;

@@ -1,6 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useConversations } from '@/hooks/useConversations';
+import {
+  getConversationLabel,
+  getReplyWindowText,
+  matchesFilter,
+  type InboxFilter,
+} from '@/lib/labels';
 import { clsx } from 'clsx';
 import { Bot, User, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -8,21 +15,30 @@ import type { Conversation } from '@/types';
 
 interface ConversationListProps {
   businessId: string;
-  status: 'open' | 'closed' | 'all';
+  filter: InboxFilter;
   selectedId: string | null;
   onSelect: (conversation: Conversation) => void;
 }
 
 export function ConversationList({
   businessId,
-  status,
+  filter,
   selectedId,
   onSelect,
 }: ConversationListProps) {
-  const { conversations, loading, unreadCount } = useConversations({
+  const { conversations: allConversations, loading } = useConversations({
     businessId,
-    status,
+    status: filter === 'closed' ? 'closed' : 'open',
   });
+
+  // Re-check labels every minute, so "Follow up" and reply windows stay current
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const conversations = allConversations.filter((c) => matchesFilter(c, filter, now));
 
   if (loading) {
     return (
@@ -38,9 +54,17 @@ export function ConversationList({
         <div className="mb-2 rounded-full bg-surface-overlay p-3">
           <Clock className="h-5 w-5 text-ink-muted" />
         </div>
-        <p className="text-sm text-ink-muted">No conversations yet</p>
+        <p className="text-sm text-ink-muted">
+          {filter === 'needs_reply'
+            ? 'All caught up'
+            : filter === 'follow_up'
+            ? 'Nobody to follow up with'
+            : 'No conversations here'}
+        </p>
         <p className="mt-1 text-xs text-ink-muted">
-          Messages will appear here when customers DM your Instagram
+          {filter === 'needs_reply'
+            ? 'Every customer message has a reply'
+            : 'Messages will appear here when customers DM your Instagram'}
         </p>
       </div>
     );
@@ -48,7 +72,10 @@ export function ConversationList({
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar-thin">
-      {conversations.map((conv) => (
+      {conversations.map((conv) => {
+        const label = getConversationLabel(conv, now);
+        const windowText = label?.key === 'needs_reply' ? getReplyWindowText(conv, now) : null;
+        return (
         <button
           key={conv.id}
           onClick={() => onSelect(conv)}
@@ -113,6 +140,25 @@ export function ConversationList({
               </p>
             </div>
 
+            {/* Status label and Instagram reply window */}
+            {label && (
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span className={clsx('rounded px-1.5 py-0.5 text-[10px] font-medium', label.className)}>
+                  {label.text}
+                </span>
+                {windowText && (
+                  <span
+                    className={clsx(
+                      'text-[10px]',
+                      windowText === 'Reply window closed' ? 'text-red-600' : 'text-ink-muted'
+                    )}
+                  >
+                    {windowText}
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Tags */}
             {conv.tags.length > 0 && (
               <div className="mt-1.5 flex gap-1">
@@ -128,7 +174,8 @@ export function ConversationList({
             )}
           </div>
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
