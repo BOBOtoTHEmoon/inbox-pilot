@@ -115,7 +115,36 @@ export function useConversations({ businessId, status = 'open' }: UseConversatio
     await supabase.from('conversations').update({ tags: newTags }).eq('id', conversationId);
   };
 
+  // Change any fields on a conversation. The screen updates straight away,
+  // then the database catches up.
+  const updateConversation = async (conversationId: string, fields: Partial<Conversation>) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conversationId ? { ...c, ...fields } : c))
+    );
+    if (!isSupabaseConfigured) return;
+    const { error: updateError } = await supabase
+      .from('conversations')
+      .update(fields)
+      .eq('id', conversationId);
+    if (updateError) {
+      console.error('Update failed:', updateError.message);
+      fetchConversations();
+    }
+  };
+
   const unreadCount = conversations.filter((c) => !c.is_read).length;
 
-  return { conversations, loading, error, unreadCount, markAsRead, closeConversation, assignToHuman, assignToBot, addTag, refetch: fetchConversations };
+  return {
+    conversations,
+    loading,
+    error,
+    unreadCount,
+    markAsRead,
+    closeConversation,
+    assignToHuman,
+    assignToBot,
+    addTag,
+    updateConversation,
+    refetch: fetchConversations,
+  };
 }

@@ -1,52 +1,79 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { useMessages } from '@/hooks/useMessages';
+import { useState, useRef, useEffect, Fragment } from 'react';
 import { clsx } from 'clsx';
-import { Send, Bot, Zap, Paperclip, Smile, ExternalLink } from 'lucide-react';
-import { format } from 'date-fns';
-import type { Conversation } from '@/types';
-import { getReplyWindowText } from '@/lib/labels';
+import { ArrowUp, Instagram } from 'lucide-react';
+import { useMessages } from '@/hooks/useMessages';
+import type { Conversation, Message } from '@/types';
+import { getReplyWindow } from '@/lib/labels';
+import { describeAttachments } from '@/lib/attachments';
+import { clockTime, dayLabel } from '@/lib/time';
+import { AttachmentView } from './AttachmentView';
+import { instagramDmLink } from './ConversationHeader';
 
 interface MessageThreadProps {
   conversation: Conversation;
   businessId: string;
+  now: number;
 }
 
-export function MessageThread({ conversation, businessId }: MessageThreadProps) {
+// Messages from the same side within 5 minutes are drawn as one group
+const GROUP_GAP_MS = 5 * 60 * 1000;
+
+function sameDay(a: string, b: string) {
+  return new Date(a).toDateString() === new Date(b).toDateString();
+}
+
+// The text Instagram gives for a media-only message is just a description
+// (like "Photo"), so it isn't shown as a separate bubble
+function isOnlyDescription(msg: Message) {
+  const attachments = msg.attachments || [];
+  if (msg.content === '[attachment]') return true;
+  return attachments.length > 0 && msg.content === describeAttachments(attachments);
+}
+
+export function MessageThread({ conversation, businessId, now }: MessageThreadProps) {
   const { messages, loading, sendMessage } = useMessages(conversation.id);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom on new messages
+  const replyWindow = getReplyWindow(conversation, now);
+
+  // Keep the newest message in view
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Focus input when conversation changes
+  // Fresh composer for each conversation
   useEffect(() => {
-    inputRef.current?.focus();
     setDraft('');
+    setSendError(null);
+    if (window.matchMedia('(min-width: 768px)').matches) inputRef.current?.focus();
   }, [conversation.id]);
 
-  const handleSend = async () => {
-    if (!draft.trim() || sending) return;
+  const resizeInput = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  };
 
+  const handleSend = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
     setSending(true);
+    setSendError(null);
     try {
-      await sendMessage(
-        businessId,
-        draft.trim(),
-        conversation.customer_instagram_id
-      );
+      await sendMessage(businessId, text, conversation.customer_instagram_id);
       setDraft('');
+      requestAnimationFrame(resizeInput);
     } catch (err: any) {
-      console.error('Failed to send:', err);
-      alert(err?.message || 'Failed to send message');
+      setSendError(err?.message || 'Message not sent. Check your connection and try again.');
     }
     setSending(false);
     inputRef.current?.focus();
@@ -59,170 +86,170 @@ export function MessageThread({ conversation, businessId }: MessageThreadProps) 
     }
   };
 
-    // Instagram only lets apps reply within 24 hours of the customer's last message
-  const windowClosed =
-    !conversation.last_customer_message_at ||
-    getReplyWindowText(conversation) === 'Reply window closed';
-  const instagramLink =
-    conversation.customer_username && conversation.customer_username !== 'unknown'
-      ? `https://ig.me/m/${conversation.customer_username}`
-      : 'https://www.instagram.com/direct/inbox/';
-
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-      </div>
-    );
-  }
-
   return (
     <>
       {/* Messages */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4 space-y-3"
-      >
-        {messages.map((msg, i) => {
-          const isCustomer = msg.sender_type === 'customer';
-          const isBot = msg.sender_type === 'bot';
-          const showTimestamp =
-            i === 0 ||
-            new Date(msg.created_at).getTime() -
-              new Date(messages[i - 1].created_at).getTime() >
-              5 * 60 * 1000;
+      <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin bg-surface">
+        {loading ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-ink border-t-transparent" />
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-ink-muted">
+            No messages saved for this conversation yet.
+          </div>
+        ) : (
+          <div className="mx-auto flex max-w-3xl flex-col px-4 py-6 md:px-8">
+            {messages.map((msg, i) => {
+              const prev = messages[i - 1];
+              const next = messages[i + 1];
+              const fromUs = msg.sender_type !== 'customer';
+              const isBot = msg.sender_type === 'bot';
 
-          return (
-            <div key={msg.id}>
-              {/* Timestamp separator */}
-              {showTimestamp && (
-                <div className="flex justify-center py-2">
-                  <span className="rounded-full bg-surface-overlay px-3 py-1 text-[10px] text-ink-muted">
-                    {format(new Date(msg.created_at), 'MMM d, h:mm a')}
-                  </span>
-                </div>
-              )}
+              const newDay = !prev || !sameDay(prev.created_at, msg.created_at);
+              const sameSideAsPrev =
+                !!prev &&
+                !newDay &&
+                (prev.sender_type !== 'customer') === fromUs &&
+                new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < GROUP_GAP_MS;
+              const lastInGroup =
+                !next ||
+                !sameDay(next.created_at, msg.created_at) ||
+                (next.sender_type !== 'customer') !== fromUs ||
+                new Date(next.created_at).getTime() - new Date(msg.created_at).getTime() >= GROUP_GAP_MS;
 
-              {/* Message bubble */}
-              <div
-                className={clsx(
-                  'flex animate-slide-up',
-                  isCustomer ? 'justify-start' : 'justify-end'
-                )}
-              >
-                <div
-                  className={clsx(
-                    'max-w-[70%] rounded-2xl px-4 py-2.5',
-                    isCustomer &&
-                      'bg-surface-overlay text-ink rounded-bl-md',
-                    isBot &&
-                      'bg-bot-light text-ink border border-bot/10 rounded-br-md',
-                    msg.sender_type === 'human' &&
-                      'bg-accent text-white rounded-br-md'
-                  )}
-                >
-                  {/* Bot indicator */}
-                  {isBot && (
-                    <div className="mb-1 flex items-center gap-1">
-                      <Zap className="h-3 w-3 text-bot" />
-                      <span className="text-[10px] font-medium text-bot">
-                        Auto-reply
-                      </span>
+              const attachments = msg.attachments || [];
+              const showText = !isOnlyDescription(msg);
+              const missingMedia = msg.content === '[attachment]' && attachments.length === 0;
+
+              return (
+                <Fragment key={msg.id}>
+                  {newDay && (
+                    <div className="my-4 flex justify-center first:mt-0">
+                      <span className="text-xs font-medium text-ink-faint">{dayLabel(msg.created_at, now)}</span>
                     </div>
                   )}
 
-                  {/* Message content */}
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                    {msg.content}
-                  </p>
-
-                  {/* Quick replies */}
-                  {msg.quick_replies && msg.quick_replies.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {msg.quick_replies.map((qr: any, idx: number) => (
-                        <span
-                          key={idx}
-                          className="rounded-full border border-current/20 px-3 py-1 text-xs"
-                        >
-                          {qr.label}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Timestamp */}
-                  <p
+                  <div
                     className={clsx(
-                      'mt-1 text-[10px]',
-                      isCustomer && 'text-ink-muted',
-                      isBot && 'text-bot/60',
-                      msg.sender_type === 'human' && 'text-white/60'
+                      'flex flex-col animate-slide-up',
+                      fromUs ? 'items-end' : 'items-start',
+                      sameSideAsPrev ? 'mt-0.5' : 'mt-3'
                     )}
                   >
-                    {format(new Date(msg.created_at), 'h:mm a')}
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+                    {isBot && !sameSideAsPrev && (
+                      <span className="mb-1 text-[11px] font-medium text-bot">Auto-reply</span>
+                    )}
+
+                    {attachments.map((a, idx) => (
+                      <div key={idx} className="mb-0.5">
+                        <AttachmentView attachment={a} fromUs={fromUs} />
+                      </div>
+                    ))}
+
+                    {missingMedia && (
+                      <a
+                        href={instagramDmLink(conversation.customer_username)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-2xl border border-dashed border-border-strong px-3.5 py-2 text-[13px] text-ink-muted hover:bg-surface-raised"
+                      >
+                        Photo or post, open in Instagram to view
+                      </a>
+                    )}
+
+                    {showText && (
+                      <div
+                        className={clsx(
+                          'max-w-[85%] md:max-w-[70%] whitespace-pre-wrap break-words px-3.5 py-2 text-[14px] leading-relaxed',
+                          'rounded-[18px]',
+                          fromUs && !isBot && 'bg-ink text-white',
+                          isBot && 'bg-bot-light text-ink',
+                          !fromUs && 'bg-surface-overlay text-ink',
+                          lastInGroup && (fromUs ? 'rounded-br-md' : 'rounded-bl-md')
+                        )}
+                      >
+                        {msg.content}
+                      </div>
+                    )}
+
+                    {lastInGroup && (
+                      <span className="mt-1 px-1 text-[11px] tabular-nums text-ink-faint">
+                        {clockTime(msg.created_at)}
+                      </span>
+                    )}
+                  </div>
+                </Fragment>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Composer, or a notice when Instagram's reply window has closed */}
-      {windowClosed ? (
-        <div className="border-t border-border p-3">
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3">
-            <p className="text-xs text-ink-muted">
-              Instagram only lets apps reply within 24 hours of the customer&apos;s last message.
-              You can still reply in the Instagram app, and your reply will show up here.
-            </p>
-            <a
-              href={instagramLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white hover:bg-accent-hover transition-colors"
-            >
-              Open in Instagram <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          </div>
+      {/* Composer, or a pointer to the Instagram app once the 24-hour window has closed */}
+      <div className="shrink-0 border-t border-border bg-surface px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:px-5">
+        <div className="mx-auto max-w-3xl">
+          {replyWindow.closed ? (
+            <div className="flex flex-col gap-3 rounded-xl bg-surface-raised px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[13px] leading-relaxed text-ink-muted">
+                It has been over 24 hours since their last message, so Instagram only allows a reply
+                from the Instagram app. It will still show up here.
+              </p>
+              <a
+                href={instagramDmLink(conversation.customer_username)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-ink px-3.5 py-2 text-[13px] font-medium text-white hover:bg-accent-hover transition-colors"
+              >
+                <Instagram className="h-4 w-4" />
+                Reply in Instagram
+              </a>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface px-3 py-2 focus-within:border-border-strong transition-colors">
+                <label htmlFor="composer" className="sr-only">
+                  Reply to {conversation.customer_name || conversation.customer_username}
+                </label>
+                <textarea
+                  id="composer"
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    resizeInput();
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Write a reply"
+                  rows={1}
+                  className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-1.5 text-base md:text-[14px] leading-relaxed outline-none focus-visible:outline-none placeholder:text-ink-faint"
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!draft.trim() || sending}
+                  aria-label="Send reply"
+                  className={clsx(
+                    'mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+                    draft.trim() && !sending ? 'bg-ink text-white hover:bg-accent-hover' : 'bg-surface-overlay text-ink-faint'
+                  )}
+                >
+                  <ArrowUp className="h-4 w-4" strokeWidth={2.4} />
+                </button>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between px-1 text-[11px]">
+                {sendError ? (
+                  <span className="text-danger">{sendError}</span>
+                ) : (
+                  <span className={clsx(replyWindow.tone === 'urgent' ? 'text-danger' : replyWindow.tone === 'soon' ? 'text-warning' : 'text-ink-faint')}>
+                    {replyWindow.text}
+                  </span>
+                )}
+                <span className="hidden text-ink-faint md:inline">Enter to send, Shift + Enter for a new line</span>
+              </div>
+            </>
+          )}
         </div>
-      ) : (
-        <div className="border-t border-border p-3">
-          <div className="flex items-end gap-2 rounded-xl border border-border bg-surface-raised p-2 focus-within:border-accent transition-colors">
-            <textarea
-              ref={inputRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
-              rows={1}
-              className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-ink-muted"
-              style={{
-                minHeight: '36px',
-                maxHeight: '120px',
-                height: 'auto',
-              }}
-              onInput={(e) => {
-                const target = e.target as HTMLTextAreaElement;
-                target.style.height = 'auto';
-                target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!draft.trim() || sending}
-              className={clsx(
-                'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors',
-                draft.trim() && !sending
-                  ? 'bg-accent text-white hover:bg-accent-hover'
-                  : 'bg-surface-overlay text-ink-muted'
-              )}
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-      </>
+      </div>
+    </>
   );
 }

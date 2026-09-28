@@ -10,13 +10,15 @@ import type { Conversation } from '@/types';
 // and the customer has gone quiet for this many hours
 export const FOLLOW_UP_AFTER_HOURS = 24;
 
-// Instagram only lets a business reply within 24 hours of the customer's last message
-const INSTAGRAM_WINDOW_HOURS = 24;
+// Instagram only lets apps reply within 24 hours of the customer's last message
+export const INSTAGRAM_WINDOW_HOURS = 24;
 
 export type InboxFilter = 'needs_reply' | 'follow_up' | 'all_open' | 'closed';
 
+export type LabelKey = 'needs_reply' | 'follow_up' | 'waiting';
+
 export interface ConversationLabel {
-  key: 'needs_reply' | 'follow_up' | 'waiting';
+  key: LabelKey;
   text: string;
   className: string;
 }
@@ -30,47 +32,53 @@ export function getConversationLabel(
   if (conv.status === 'closed') return null;
 
   if (conv.last_sender_type === 'customer') {
-    return {
-      key: 'needs_reply',
-      text: 'Needs reply',
-      className: 'bg-red-50 text-red-700',
-    };
+    return { key: 'needs_reply', text: 'Needs reply', className: 'bg-danger-light text-danger' };
   }
 
   if (conv.last_sender_type === 'human' || conv.last_sender_type === 'bot') {
     const quietFor = now - new Date(conv.last_message_at).getTime();
     if (quietFor >= FOLLOW_UP_AFTER_HOURS * HOUR) {
-      return {
-        key: 'follow_up',
-        text: 'Follow up',
-        className: 'bg-amber-50 text-amber-700',
-      };
+      return { key: 'follow_up', text: 'Follow up', className: 'bg-warning-light text-warning' };
     }
-    return {
-      key: 'waiting',
-      text: 'Replied',
-      className: 'bg-surface-overlay text-ink-muted',
-    };
+    return { key: 'waiting', text: 'Replied', className: 'bg-surface-overlay text-ink-muted' };
   }
 
   return null;
 }
 
-// How long is left to reply on Instagram, e.g. "5h left to reply" or "Reply window closed"
-export function getReplyWindowText(
-  conv: Conversation,
-  now: number = Date.now()
-): string | null {
-  if (!conv.last_customer_message_at) return null;
+export interface ReplyWindow {
+  closed: boolean;
+  // 1 = the full 24 hours left, 0 = no time left
+  fraction: number;
+  text: string;
+  tone: 'calm' | 'soon' | 'urgent' | 'closed';
+}
 
-  const closesAt =
-    new Date(conv.last_customer_message_at).getTime() + INSTAGRAM_WINDOW_HOURS * HOUR;
-  const left = closesAt - now;
+// How much of Instagram's 24-hour reply window is left
+export function getReplyWindow(conv: Conversation, now: number = Date.now()): ReplyWindow {
+  if (!conv.last_customer_message_at) {
+    return { closed: true, fraction: 0, text: 'Reply in the Instagram app', tone: 'closed' };
+  }
 
-  if (left <= 0) return 'Reply window closed';
+  const windowMs = INSTAGRAM_WINDOW_HOURS * HOUR;
+  const left = new Date(conv.last_customer_message_at).getTime() + windowMs - now;
+
+  if (left <= 0) {
+    return { closed: true, fraction: 0, text: 'Reply in the Instagram app', tone: 'closed' };
+  }
+
   const hours = Math.floor(left / HOUR);
-  if (hours >= 1) return `${hours}h left to reply`;
-  return `${Math.max(1, Math.floor(left / 60000))}m left to reply`;
+  const text = hours >= 1 ? `${hours}h left to reply` : `${Math.max(1, Math.floor(left / 60000))}m left to reply`;
+  const tone = left < HOUR ? 'urgent' : left < 6 * HOUR ? 'soon' : 'calm';
+
+  return { closed: false, fraction: Math.min(1, left / windowMs), text, tone };
+}
+
+// Kept for older code: the same information as plain text
+export function getReplyWindowText(conv: Conversation, now: number = Date.now()): string | null {
+  if (!conv.last_customer_message_at) return null;
+  const w = getReplyWindow(conv, now);
+  return w.closed ? 'Reply window closed' : w.text;
 }
 
 export function matchesFilter(conv: Conversation, filter: InboxFilter, now: number): boolean {

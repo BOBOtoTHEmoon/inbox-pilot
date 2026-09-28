@@ -1,71 +1,108 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #0a0a0a;
-  --color-ink-light: #3a3a3a;
-  --color-ink-muted: #71717a;
+  --color-ink: #16161a;
+  --color-ink-light: #3f3f46;
+  --color-ink-muted: #6e6e78;
+  --color-ink-faint: #a1a1aa;
   --color-surface: #ffffff;
-  --color-surface-raised: #fafafa;
-  --color-surface-overlay: #f4f4f5;
-  --color-border: #e4e4e7;
-  --color-border-strong: #d4d4d8;
-  --color-accent: #2563eb;
-  --color-accent-hover: #1d4ed8;
-  --color-accent-light: #eff6ff;
-  --color-success: #16a34a;
-  --color-success-light: #f0fdf4;
-  --color-warning: #d97706;
-  --color-warning-light: #fffbeb;
-  --color-danger: #dc2626;
-  --color-danger-light: #fef2f2;
-  --color-bot: #8b5cf6;
-  --color-bot-light: #f5f3ff;
+  --color-surface-raised: #f7f7f8;
+  --color-surface-overlay: #efeff1;
+  --color-border: #e6e6ea;
+  --color-border-strong: #d4d4da;
+  --color-accent: #16161a;
+  --color-accent-hover: #2e2e35;
+  --color-accent-light: #efeff1;
+  --color-focus: #3e63dd;
+  --color-success: #1f8a4c;
+  --color-success-light: #eaf6ef;
+  --color-warning: #c2560c;
+  --color-warning-light: #fdf1e7;
+  --color-danger: #d93036;
+  --color-danger-light: #fdecec;
+  --color-bot: #6e56cf;
+  --color-bot-light: #f1eefb;
 
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-feature-settings: 'ss01', 'cv11';
+}
+
+/* One visible focus style everywhere, only for keyboard users */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 /* Scrollbar styling */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
-
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
 }
-
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
 }
-
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: var(--color-border);
+  background-color: var(--color-border-strong);
   border-radius: 3px;
 }
 
-/* Message bubble animations */
+/* New message arriving */
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
-
 .animate-slide-up {
-  animation: slideUp 0.2s ease-out;
+  animation: slideUp 0.18s ease-out;
 }
 
-/* Pulse dot for unread indicators */
+/* Details panel sliding in on smaller screens */
+@keyframes panelIn {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.animate-panel-in {
+  animation: panelIn 0.2s ease-out;
+}
+
+/* Kept for older components that still use it */
 @keyframes pulseDot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
-
 .animate-pulse-dot {
   animation: pulseDot 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

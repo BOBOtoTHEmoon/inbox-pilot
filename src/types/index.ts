@@ -1,9 +1,3 @@
-// ============================================
-// INBOXPILOT — TYPE DEFINITIONS
-// ============================================
-
-// ── Database Types (mirrors Supabase schema) ──
-
 export interface Business {
   id: string;
   name: string;
@@ -61,9 +55,17 @@ export interface Message {
   read: boolean;
   created_at: string;
 }
-
 export interface MessageAttachment {
-  type: 'image' | 'video' | 'file' | 'product';
+  type:
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'file'
+    | 'product'
+    | 'share'
+    | 'reel'
+    | 'story_reply'
+    | 'story_mention';
   url: string;
   title?: string;
   subtitle?: string;
@@ -294,10 +296,11 @@ export interface IGMessagingEvent {
     mid: string;
     is_echo?: boolean;
     text?: string;
-    attachments?: {
+        attachments?: {
       type: string;
-      payload: { url: string };
+      payload: { url: string; title?: string };
     }[];
+    reply_to?: { story?: { url: string; id: string }; mid?: string };
     quick_reply?: { payload: string };
   };
   postback?: {

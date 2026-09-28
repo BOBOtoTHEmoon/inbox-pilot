@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { getInstagramProfile } from '@/lib/instagram';
+import { attachmentsFromApi, describeAttachments } from '@/lib/attachments';
 
 const GRAPH = 'https://graph.instagram.com/v21.0';
 
@@ -9,7 +10,15 @@ interface IGMessage {
   message?: string;
   from?: { id: string; username?: string };
   to?: { data: { id: string; username?: string }[] };
+  attachments?: any;
+  shares?: any;
+  story?: any;
 }
+
+// Ask for photos, shared posts and story replies too. If Instagram rejects
+// those extra fields, fall back to text only so the import still works.
+const RICH_FIELDS = 'id,created_time,from,to,message,attachments,shares,story';
+const BASIC_FIELDS = 'id,created_time,from,to,message';
 
 interface ImportResult {
   conversations: number;
@@ -29,10 +38,12 @@ async function igGet(path: string, token: string) {
 
 // Get the messages of one conversation, with sender details
 async function getConversationMessages(conversationId: string, token: string): Promise<IGMessage[]> {
-  const conv = await igGet(
-    `/${conversationId}?fields=messages{id,created_time,from,to,message}`,
-    token
-  );
+  let conv;
+  try {
+    conv = await igGet(`/${conversationId}?fields=messages{${RICH_FIELDS}}`, token);
+  } catch {
+    conv = await igGet(`/${conversationId}?fields=messages{${BASIC_FIELDS}}`, token);
+  }
   const messages: IGMessage[] = conv?.messages?.data || [];
 
   // If Instagram only returned message IDs, fetch each message's details
@@ -42,9 +53,13 @@ async function getConversationMessages(conversationId: string, token: string): P
   const detailed: IGMessage[] = [];
   for (const m of messages.slice(0, 20)) {
     try {
-      detailed.push(await igGet(`/${m.id}?fields=id,created_time,from,to,message`, token));
+      detailed.push(await igGet(`/${m.id}?fields=${RICH_FIELDS}`, token));
     } catch {
-      // Older messages can't be read through the API; skip them
+      try {
+        detailed.push(await igGet(`/${m.id}?fields=${BASIC_FIELDS}`, token));
+      } catch {
+        // Older messages can't be read through the API; skip them
+      }
     }
   }
   return detailed;
@@ -144,21 +159,35 @@ export async function importRecentConversations(
       const rows = messages
         .filter((m) => m.id)
         .sort((a, b) => new Date(a.created_time).getTime() - new Date(b.created_time).getTime())
-        .map((m) => ({
-          conversation_id: conversation!.id,
-          business_id: business.id,
-          instagram_message_id: m.id,
-          sender_type: isBusiness(m.from) ? 'human' : 'customer',
-          content: m.message || '[attachment]',
-          message_type: m.message ? 'text' : 'image',
-          created_at: new Date(m.created_time).toISOString(),
-        }));
+                .map((m) => {
+          const attachments = attachmentsFromApi(m);
+          return {
+            conversation_id: conversation!.id,
+            business_id: business.id,
+            instagram_message_id: m.id,
+            sender_type: isBusiness(m.from) ? 'human' : 'customer',
+            content: m.message || describeAttachments(attachments),
+            message_type: attachments.length > 0 ? 'image' : 'text',
+            attachments,
+            created_at: new Date(m.created_time).toISOString(),
+          };
+        });
 
       const { data: inserted, error: insertError } = await supabaseAdmin
         .from('messages')
         .upsert(rows, { onConflict: 'instagram_message_id', ignoreDuplicates: true })
         .select('id');
       if (insertError) throw insertError;
+      
+      // Messages saved earlier without their photo or post details get them now
+      for (const row of rows) {
+        if (row.attachments.length === 0) continue;
+        await supabaseAdmin
+          .from('messages')
+          .update({ attachments: row.attachments, content: row.content, message_type: 'image' })
+          .eq('instagram_message_id', row.instagram_message_id)
+          .eq('content', '[attachment]');
+      }
 
       // Older messages were just added, so recalculate the conversation's
       // "last message" details from what is actually saved

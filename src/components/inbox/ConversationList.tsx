@@ -1,181 +1,177 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useConversations } from '@/hooks/useConversations';
-import {
-  getConversationLabel,
-  getReplyWindowText,
-  matchesFilter,
-  type InboxFilter,
-} from '@/lib/labels';
 import { clsx } from 'clsx';
-import { Bot, User, Clock } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
 import type { Conversation } from '@/types';
+import { getConversationLabel, getReplyWindow, type InboxFilter } from '@/lib/labels';
+import { shortTime, quietFor } from '@/lib/time';
+import { Avatar } from './Avatar';
 
 interface ConversationListProps {
-  businessId: string;
+  conversations: Conversation[];
   filter: InboxFilter;
+  loading: boolean;
   selectedId: string | null;
+  now: number;
+  searching: boolean;
   onSelect: (conversation: Conversation) => void;
 }
 
+const EMPTY: Record<InboxFilter, { title: string; body: string }> = {
+  needs_reply: {
+    title: 'Nobody is waiting on you',
+    body: 'When a customer messages, they will show up here until someone replies.',
+  },
+  follow_up: {
+    title: 'No one to chase',
+    body: 'People who go quiet for a day after your reply will show up here.',
+  },
+  all_open: {
+    title: 'No open conversations',
+    body: 'New Instagram DMs will appear here as they arrive.',
+  },
+  closed: {
+    title: 'Nothing marked done yet',
+    body: 'Conversations you mark done move here, out of the way.',
+  },
+};
+
+const BAR_TONE = {
+  calm: 'bg-ink-faint',
+  soon: 'bg-warning',
+  urgent: 'bg-danger',
+  closed: 'bg-transparent',
+};
+
+const TEXT_TONE = {
+  calm: 'text-ink-muted',
+  soon: 'text-warning',
+  urgent: 'text-danger',
+  closed: 'text-ink-faint',
+};
+
 export function ConversationList({
-  businessId,
+  conversations,
   filter,
+  loading,
   selectedId,
+  now,
+  searching,
   onSelect,
 }: ConversationListProps) {
-  const { conversations: allConversations, loading } = useConversations({
-    businessId,
-    status: filter === 'closed' ? 'closed' : 'open',
-  });
-
-  // Re-check labels every minute, so "Follow up" and reply windows stay current
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60 * 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const conversations = allConversations.filter((c) => matchesFilter(c, filter, now));
-
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      <div className="flex-1 space-y-1 p-2" aria-busy="true">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-3">
+            <div className="h-10 w-10 rounded-full bg-surface-overlay" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3 w-1/3 rounded bg-surface-overlay" />
+              <div className="h-3 w-2/3 rounded bg-surface-overlay" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (conversations.length === 0) {
+    const empty = searching
+      ? { title: 'No matches', body: 'Try a name, username or something they said.' }
+      : EMPTY[filter];
     return (
-      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
-        <div className="mb-2 rounded-full bg-surface-overlay p-3">
-          <Clock className="h-5 w-5 text-ink-muted" />
-        </div>
-        <p className="text-sm text-ink-muted">
-          {filter === 'needs_reply'
-            ? 'All caught up'
-            : filter === 'follow_up'
-            ? 'Nobody to follow up with'
-            : 'No conversations here'}
-        </p>
-        <p className="mt-1 text-xs text-ink-muted">
-          {filter === 'needs_reply'
-            ? 'Every customer message has a reply'
-            : 'Messages will appear here when customers DM your Instagram'}
-        </p>
+      <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+        <p className="text-sm font-medium text-ink">{empty.title}</p>
+        <p className="mt-1 max-w-[16rem] text-[13px] leading-relaxed text-ink-muted">{empty.body}</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto scrollbar-thin">
+    <ul className="flex-1 overflow-y-auto scrollbar-thin px-2 pb-2" role="listbox" aria-label="Conversations">
       {conversations.map((conv) => {
         const label = getConversationLabel(conv, now);
-        const windowText = label?.key === 'needs_reply' ? getReplyWindowText(conv, now) : null;
+        const selected = selectedId === conv.id;
+        const unread = !conv.is_read;
+        const fromUs = conv.last_sender_type === 'human' || conv.last_sender_type === 'bot';
+        const name = conv.customer_name || conv.customer_username || 'Instagram user';
+
         return (
-        <button
-          key={conv.id}
-          onClick={() => onSelect(conv)}
-          className={clsx(
-            'flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors',
-            selectedId === conv.id
-              ? 'bg-accent-light'
-              : 'hover:bg-surface-overlay',
-            !conv.is_read && 'bg-surface-raised'
-          )}
-        >
-          {/* Avatar */}
-          <div className="relative shrink-0">
-            {conv.customer_profile_pic ? (
-              <img
-                src={conv.customer_profile_pic}
-                alt=""
-                className="h-10 w-10 rounded-full object-cover"
-              />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-overlay text-ink-muted">
-                <User className="h-5 w-5" />
-              </div>
-            )}
-            {!conv.is_read && (
-              <div className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-accent animate-pulse-dot" />
-            )}
-          </div>
-
-          {/* Content */}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2">
-              <span
-                className={clsx(
-                  'truncate text-sm',
-                  !conv.is_read ? 'font-semibold text-ink' : 'font-medium text-ink'
-                )}
-              >
-                {conv.customer_name || conv.customer_username || 'Unknown'}
-              </span>
-              <span className="shrink-0 text-[11px] text-ink-muted">
-                {formatDistanceToNow(new Date(conv.last_message_at), {
-                  addSuffix: false,
-                })}
-              </span>
-            </div>
-
-            <div className="mt-0.5 flex items-center gap-1.5">
-              {/* Bot/Human indicator */}
-              {conv.assigned_to === 'bot' ? (
-                <Bot className="h-3 w-3 shrink-0 text-bot" />
-              ) : (
-                <User className="h-3 w-3 shrink-0 text-success" />
+          <li key={conv.id} role="option" aria-selected={selected}>
+            <button
+              onClick={() => onSelect(conv)}
+              className={clsx(
+                'flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors',
+                selected ? 'bg-surface-overlay' : 'hover:bg-surface-raised'
               )}
-              <p
-                className={clsx(
-                  'truncate text-xs',
-                  !conv.is_read ? 'text-ink-light' : 'text-ink-muted'
-                )}
-              >
-                {conv.last_message_preview || 'No messages'}
-              </p>
-            </div>
-
-            {/* Status label and Instagram reply window */}
-            {label && (
-              <div className="mt-1.5 flex items-center gap-1.5">
-                <span className={clsx('rounded px-1.5 py-0.5 text-[10px] font-medium', label.className)}>
-                  {label.text}
-                </span>
-                {windowText && (
+            >
+              <div className="relative">
+                <Avatar src={conv.customer_profile_pic} name={name} size={40} />
+                {label && label.key !== 'waiting' && (
                   <span
                     className={clsx(
-                      'text-[10px]',
-                      windowText === 'Reply window closed' ? 'text-red-600' : 'text-ink-muted'
+                      'absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2',
+                      selected ? 'border-surface-overlay' : 'border-surface',
+                      label.key === 'needs_reply' ? 'bg-danger' : 'bg-warning'
                     )}
-                  >
-                    {windowText}
-                  </span>
+                    aria-hidden="true"
+                  />
                 )}
               </div>
-            )}
 
-            {/* Tags */}
-            {conv.tags.length > 0 && (
-              <div className="mt-1.5 flex gap-1">
-                {conv.tags.slice(0, 2).map((tag) => (
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
                   <span
-                    key={tag}
-                    className="rounded bg-surface-overlay px-1.5 py-0.5 text-[10px] text-ink-muted"
+                    className={clsx(
+                      'truncate text-sm',
+                      unread ? 'font-semibold text-ink' : 'font-medium text-ink-light'
+                    )}
                   >
-                    {tag}
+                    {name}
                   </span>
-                ))}
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-ink-faint">
+                    {unread && <span className="h-1.5 w-1.5 rounded-full bg-focus" aria-label="Unread" />}
+                    {shortTime(conv.last_message_at, now)}
+                  </span>
+                </div>
+
+                <p className={clsx('mt-0.5 truncate text-[13px]', unread ? 'text-ink-light' : 'text-ink-muted')}>
+                  {fromUs && <span className="text-ink-faint">You: </span>}
+                  {conv.last_message_preview || 'No messages yet'}
+                </p>
+
+                {/* What this conversation needs */}
+                {label?.key === 'needs_reply' && <ReplyWindowBar conv={conv} now={now} />}
+                {label?.key === 'follow_up' && (
+                  <p className="mt-2 text-xs text-warning">
+                    Quiet for {quietFor(conv.last_message_at, now)}
+                  </p>
+                )}
               </div>
-            )}
-          </div>
-        </button>
+            </button>
+          </li>
         );
       })}
+    </ul>
+  );
+}
+
+// The 24-hour reply window, drawn as a bar that drains as time runs out
+function ReplyWindowBar({ conv, now }: { conv: Conversation; now: number }) {
+  const w = getReplyWindow(conv, now);
+
+  if (w.closed) {
+    return <p className="mt-2 text-xs text-ink-faint">{w.text}</p>;
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <div className="h-1 w-14 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
+        <div
+          className={clsx('h-full rounded-full', BAR_TONE[w.tone])}
+          style={{ width: `${Math.max(4, w.fraction * 100)}%` }}
+        />
+      </div>
+      <span className={clsx('text-xs tabular-nums', TEXT_TONE[w.tone])}>{w.text}</span>
     </div>
   );
 }

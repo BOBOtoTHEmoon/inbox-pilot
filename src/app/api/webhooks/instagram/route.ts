@@ -10,6 +10,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { getInstagramProfile, verifyWebhook } from '@/lib/instagram';
 import { processIncomingMessage, logAnalyticsEvent } from '@/lib/automation-engine';
 import type { IGWebhookEvent, IGMessagingEvent, IGChangeEvent } from '@/types';
+import { attachmentsFromWebhook, describeAttachments } from '@/lib/attachments';
 
 // ── Webhook Verification (GET) ──
 export async function GET(request: NextRequest) {
@@ -115,9 +116,9 @@ async function handleMessagingEvent(event: IGMessagingEvent, igAccountId: string
   const messageText = event.message?.text
     || event.message?.quick_reply?.payload
     || '';
+  const attachments = attachmentsFromWebhook(event.message);
 
-  if (!messageText && !event.message?.attachments) return;
-
+  if (!messageText && attachments.length === 0) return;
   // 1. Find the business by IG account ID
   const { data: business } = await supabaseAdmin
     .from('businesses')
@@ -145,12 +146,9 @@ async function handleMessagingEvent(event: IGMessagingEvent, igAccountId: string
     business_id: business.id,
     instagram_message_id: event.message?.mid || null,
     sender_type: isEcho ? 'human' : 'customer',
-    content: messageText || '[attachment]',
-    message_type: event.message?.attachments ? 'image' : 'text',
-    attachments: event.message?.attachments?.map((a) => ({
-      type: a.type,
-      url: a.payload.url,
-    })) || [],
+        content: messageText || describeAttachments(attachments),
+    message_type: attachments.length > 0 ? 'image' : 'text',
+    attachments,
   };
 
   // 3. Save the message. ignoreDuplicates means:
