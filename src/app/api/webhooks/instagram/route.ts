@@ -33,15 +33,24 @@ export async function GET(request: NextRequest) {
 
 // ── Webhook Events (POST) ──
 export async function POST(request: NextRequest) {
+  let body: any = null;
   try {
-    const body: IGWebhookEvent = await request.json();
+    body = await request.json();
+
+    // Record every raw event so we can see exactly what Meta sends
+    await supabaseAdmin.from('webhook_logs').insert({ body });
 
     // Process BEFORE returning response (Vercel kills async work after response)
     await handleWebhookEvent(body);
 
     return NextResponse.json({ status: 'ok' }, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[Webhook] Processing error:', error);
+    try {
+      await supabaseAdmin
+        .from('webhook_logs')
+        .insert({ body, error: String(error?.message || error) });
+    } catch {}
     return NextResponse.json({ status: 'ok' }, { status: 200 });
   }
 }
@@ -92,6 +101,9 @@ async function handleMessagingEvent(event: IGMessagingEvent, igAccountId: string
 
   if (!business) {
     console.error(`[Webhook] No business found for IG account: ${igAccountId}`);
+    await supabaseAdmin
+      .from('webhook_logs')
+      .insert({ body: null, error: `No business found for IG account: ${igAccountId}` });
     return;
   }
 
