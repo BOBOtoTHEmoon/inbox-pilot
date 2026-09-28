@@ -10,7 +10,8 @@ import {
   RefreshCw,
   Check,
   ExternalLink,
-  Mail,
+    Mail,
+  Link as LinkIcon,
 } from 'lucide-react';
 
 const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID || 'demo';
@@ -20,6 +21,47 @@ export default function SettingsPage() {
   const [igUsername, setIgUsername] = useState<string | null>(null);
   const [shopifyStore, setShopifyStore] = useState<string | null>(null);
   const [loadingBusiness, setLoadingBusiness] = useState(true);
+    const [connecting, setConnecting] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Ask the server for a signed "Connect Instagram" link for this business
+  const getConnectLink = async (): Promise<string | null> => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch('/api/auth/instagram/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionData.session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ businessId: BUSINESS_ID }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(json.error || 'Could not create a connect link');
+      return null;
+    }
+    return json.url as string;
+  };
+
+  // Connect from this device
+  const handleConnect = async () => {
+    setConnecting(true);
+    const url = await getConnectLink();
+    if (url) {
+      window.location.href = url;
+    } else {
+      setConnecting(false);
+    }
+  };
+
+  // Copy a link to send to someone else (for example, the client on their phone)
+  const handleCopyLink = async () => {
+    const url = await getConnectLink();
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 3000);
+  };
 
   // Load the real connected accounts for this business
   useEffect(() => {
@@ -96,16 +138,30 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="mt-3 flex gap-2">
-            <a
-              href="https://developers.facebook.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-accent hover:text-accent-hover transition-colors"
+                    <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={handleConnect}
+              disabled={connecting}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-60"
             >
-              Meta Developer Portal <ExternalLink className="h-3 w-3" />
-            </a>
+              <Instagram className="h-3.5 w-3.5" />
+              {connecting
+                ? 'Opening Instagram...'
+                : igUsername
+                ? 'Connect a different account'
+                : 'Connect Instagram'}
+            </button>
+            <button
+              onClick={handleCopyLink}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-ink-muted hover:bg-surface-overlay transition-colors"
+            >
+              {linkCopied ? <Check className="h-3.5 w-3.5" /> : <LinkIcon className="h-3.5 w-3.5" />}
+              {linkCopied ? 'Link copied' : 'Copy link to send to someone'}
+            </button>
           </div>
+          <p className="mt-2 text-[11px] text-ink-muted">
+            The link works for 7 days. Whoever opens it logs in to Instagram on their own device.
+          </p>
         </section>
 
         {/* Shopify Integration */}
