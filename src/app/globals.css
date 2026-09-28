@@ -106,3 +106,14 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Room at the bottom of scrolling pages so the last item can scroll above
+   the floating tab bar on phones. Content still slides under the glass. */
+.pb-tabbar {
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 768px) {
+  .pb-tabbar {
+    padding-bottom: 1.5rem;
+  }
+}

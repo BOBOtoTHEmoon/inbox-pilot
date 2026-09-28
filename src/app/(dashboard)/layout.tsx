@@ -7,6 +7,8 @@ import { Inbox, Zap, BarChart3, Settings, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
+const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID || 'demo';
+
 const navItems = [
   { href: '/inbox', label: 'Inbox', icon: Inbox },
   { href: '/automations', label: 'Automations', icon: Zap },
@@ -39,6 +41,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [waiting, setWaiting] = useState(0);
 
   // Only logged-in users can see the dashboard (customer DMs are private)
   useEffect(() => {
@@ -55,6 +58,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     });
   }, [router]);
+
+  // How many people are waiting for a reply, shown as a badge on Inbox
+  useEffect(() => {
+    if (!isSupabaseConfigured || checkingAuth) return;
+    const load = () =>
+      supabase
+        .from('conversations')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', BUSINESS_ID)
+        .eq('status', 'open')
+        .eq('last_sender_type', 'customer')
+        .then(({ count }) => setWaiting(count || 0));
+    load();
+    const timer = setInterval(load, 60 * 1000);
+    return () => clearInterval(timer);
+  }, [checkingAuth, pathname]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -95,6 +114,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 )}
               >
                 <item.icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.2 : 1.8} />
+                {item.href === '/inbox' && waiting > 0 && (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-danger ring-2 ring-surface-raised" />
+                )}
                 <span className="pointer-events-none absolute left-12 z-50 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
                   {item.label}
                 </span>
@@ -116,27 +138,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </aside>
 
-      {/* Page content. On phones, leave room for the bottom bar */}
-      <main className="flex-1 overflow-hidden bg-surface pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+      {/* Page content. On phones it runs under the floating tab bar */}
+      <main className="flex-1 overflow-hidden bg-surface">
         {children}
       </main>
 
-      {/* Phones: bottom tab bar */}
-      <nav className="md:hidden fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
-        <div className="grid h-16 grid-cols-4">
+      {/* Phones: floating glass tab bar */}
+      <nav
+        aria-label="Main"
+        className="md:hidden pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+      >
+        <div className="pointer-events-auto grid w-full max-w-md grid-cols-4 gap-1 rounded-full border border-white/70 bg-[rgba(239,239,241,0.62)] p-1.5 ring-1 ring-ink/[0.06] shadow-[0_10px_40px_rgba(22,22,26,0.16),0_2px_6px_rgba(22,22,26,0.06),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-2xl backdrop-saturate-[1.8]">
           {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
+            const badge = item.href === '/inbox' && waiting > 0 ? waiting : null;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
                 className={clsx(
-                  'flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors',
-                  active ? 'text-ink' : 'text-ink-faint'
+                  'relative flex flex-col items-center justify-center gap-0.5 rounded-full py-2 text-[11px] font-medium transition-colors',
+                  active
+                    ? 'bg-white text-ink shadow-[0_1px_4px_rgba(22,22,26,0.10)]'
+                    : 'text-ink-muted active:bg-white/60'
                 )}
               >
-                <item.icon className="h-5 w-5" strokeWidth={active ? 2.2 : 1.8} />
+                <span className="relative">
+                  <item.icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.2 : 1.8} />
+                  {badge !== null && (
+                    <span className="absolute -right-3 -top-1.5 min-w-[18px] rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-[18px] text-white tabular-nums ring-2 ring-white/80">
+                      {badge > 99 ? '99+' : badge}
+                    </span>
+                  )}
+                </span>
                 {item.label}
               </Link>
             );

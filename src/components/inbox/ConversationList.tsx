@@ -87,7 +87,7 @@ export function ConversationList({
   }
 
   return (
-    <ul className="flex-1 overflow-y-auto scrollbar-thin px-2 pb-2" role="listbox" aria-label="Conversations">
+        <ul className="flex-1 overflow-y-auto scrollbar-thin px-2 pb-tabbar" role="listbox" aria-label="Conversations">
       {conversations.map((conv) => {
         const label = getConversationLabel(conv, now);
         const selected = selectedId === conv.id;

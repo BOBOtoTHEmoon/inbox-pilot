@@ -138,7 +138,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-6 max-w-2xl">
+            <div className="flex-1 overflow-y-auto scrollbar-thin p-6 pb-tabbar space-y-6 max-w-2xl">
         {/* Instagram Connection */}
         <section className="rounded-xl border border-border p-5">
           <div className="flex items-center gap-3 mb-4">
