@@ -73,17 +73,28 @@ export function useMessages(conversationId: string | null) {
       return newMsg;
     }
 
-    const { data: newMessage } = await supabase
-      .from('messages')
-      .insert({ conversation_id: conversationId, business_id: businessId, sender_type: 'human', content, message_type: 'text' })
-      .select()
-      .single();
-
-    await fetch('/api/instagram/send', {
+    // The server sends the DM and saves it. The new row then arrives here
+    // through the realtime subscription above.
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch('/api/instagram/send', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId, recipientId: igRecipientId, message: content }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionData.session?.access_token || ''}`,
+      },
+      body: JSON.stringify({
+        businessId,
+        conversationId,
+        recipientId: igRecipientId,
+        message: content,
+      }),
     });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || 'Failed to send message');
+    }
+    const newMessage = json.message as Message;
 
     return newMessage;
   };

@@ -43,8 +43,9 @@ export function MessageThread({ conversation, businessId }: MessageThreadProps) 
         conversation.customer_instagram_id
       );
       setDraft('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to send:', err);
+      alert(err?.message || 'Failed to send message');
     }
     setSending(false);
     inputRef.current?.focus();

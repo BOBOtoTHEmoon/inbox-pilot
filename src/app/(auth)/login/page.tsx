@@ -2,14 +2,27 @@
 
 import { useState } from 'react';
 import { Send } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Supabase Auth
+    setError(null);
+    setLoading(true);
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    setLoading(false);
+    if (signInError) {
+      setError(signInError.message);
+      return;
+    }
     window.location.href = '/inbox';
   };
 
@@ -54,11 +67,15 @@ export default function LoginPage() {
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent transition-colors"
               />
             </div>
+            {error && (
+              <p className="text-xs text-red-600">{error}</p>
+            )}
             <button
               onClick={handleLogin}
-              className="w-full rounded-lg bg-accent py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
+              disabled={loading}
+              className="w-full rounded-lg bg-accent py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-60"
             >
-              Sign In
+              {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </div>
         </div>

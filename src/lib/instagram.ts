@@ -101,25 +101,31 @@ export async function sendPrivateReply(options: {
 }
 
 // ── Get User Profile ──
+// For people who DM the business, Instagram exposes name, username and profile_pic
 export async function getInstagramProfile(
   userId: string,
   accessToken: string
 ): Promise<IGProfile> {
   const response = await fetch(
-    `${GRAPH_API_BASE}/${userId}?fields=id,username,name,profile_picture_url`,
+    `${GRAPH_API_BASE}/${userId}?fields=name,username,profile_pic`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     }
   );
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({}));
     console.error('[IG API] Get profile failed:', error);
-    // Return minimal info if profile fetch fails
     return { id: userId, username: 'unknown' };
   }
 
-  return response.json();
+  const data = await response.json();
+  return {
+    id: userId,
+    username: data.username || 'unknown',
+    name: data.name,
+    profile_picture_url: data.profile_pic,
+  };
 }
 
 // ── Verify Webhook (for initial setup) ──

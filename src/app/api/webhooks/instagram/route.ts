@@ -5,6 +5,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getInstagramProfile, verifyWebhook } from '@/lib/instagram';
 import { processIncomingMessage, logAnalyticsEvent } from '@/lib/automation-engine';
@@ -31,11 +32,37 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ error: 'Verification failed' }, { status: 403 });
 }
 
+// ── Signature check ──
+// Meta signs every webhook with the Instagram app secret.
+// This stops anyone else from posting fake messages to this endpoint.
+function isValidSignature(rawBody: string, signatureHeader: string | null): boolean {
+  const secret = process.env.INSTAGRAM_APP_SECRET;
+  if (!secret) {
+    console.warn('[Webhook] INSTAGRAM_APP_SECRET not set, skipping signature check');
+    return true;
+  }
+  if (!signatureHeader?.startsWith('sha256=')) return false;
+
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const received = signatureHeader.slice('sha256='.length);
+  if (expected.length !== received.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+}
+
 // ── Webhook Events (POST) ──
 export async function POST(request: NextRequest) {
   let body: any = null;
   try {
-    body = await request.json();
+    const rawBody = await request.text();
+
+    if (!isValidSignature(rawBody, request.headers.get('x-hub-signature-256'))) {
+      await supabaseAdmin
+        .from('webhook_logs')
+        .insert({ body: null, error: 'Invalid signature (check INSTAGRAM_APP_SECRET)' });
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    }
+
+    body = JSON.parse(rawBody);
 
     // Record every raw event so we can see exactly what Meta sends
     await supabaseAdmin.from('webhook_logs').insert({ body });
@@ -78,26 +105,25 @@ async function handleWebhookEvent(event: IGWebhookEvent) {
   }
 }
 
-// ── Handle Incoming DM ──
+// ── Handle Incoming DM (and echoes of messages the business sent) ──
 async function handleMessagingEvent(event: IGMessagingEvent, igAccountId: string) {
-  // Skip if this is our own message (echo)
-  if (event.sender.id === igAccountId) return;
+  // An "echo" is a message the business itself sent: a reply Ebuka typed in the
+  // Instagram app, or a message this app sent. The customer is then the recipient.
+  const isEcho = !!event.message?.is_echo || event.sender.id === igAccountId;
+  const customerIgId = isEcho ? event.recipient.id : event.sender.id;
 
-  // Skip postbacks for now (handle quick_reply payloads)
   const messageText = event.message?.text
     || event.message?.quick_reply?.payload
     || '';
 
   if (!messageText && !event.message?.attachments) return;
 
-  console.log(`[Webhook] Looking up business with IG account ID: ${igAccountId}`);
-
   // 1. Find the business by IG account ID
   const { data: business } = await supabaseAdmin
     .from('businesses')
     .select('*')
     .eq('instagram_account_id', igAccountId)
-    .single();
+    .maybeSingle();
 
   if (!business) {
     console.error(`[Webhook] No business found for IG account: ${igAccountId}`);
@@ -110,23 +136,32 @@ async function handleMessagingEvent(event: IGMessagingEvent, igAccountId: string
   // 2. Find or create conversation
   const { conversation, isFirstMessage } = await findOrCreateConversation(
     business.id,
-    event.sender.id,
+    customerIgId,
     business.instagram_access_token
   );
 
-  // 3. Save incoming message
-  await supabaseAdmin.from('messages').insert({
+  const messageRow = {
     conversation_id: conversation.id,
     business_id: business.id,
     instagram_message_id: event.message?.mid || null,
-    sender_type: 'customer',
+    sender_type: isEcho ? 'human' : 'customer',
     content: messageText || '[attachment]',
     message_type: event.message?.attachments ? 'image' : 'text',
     attachments: event.message?.attachments?.map((a) => ({
       type: a.type,
       url: a.payload.url,
     })) || [],
-  });
+  };
+
+  // 3. Save the message. ignoreDuplicates means:
+  //    - Meta retrying the same webhook does not create a second copy
+  //    - echoes of messages this app already saved (bot or dashboard replies) are skipped
+  await supabaseAdmin
+    .from('messages')
+    .upsert(messageRow, { onConflict: 'instagram_message_id', ignoreDuplicates: true });
+
+  // Echoes stop here: no analytics as "received", no automation
+  if (isEcho) return;
 
   // 4. Log analytics
   await logAnalyticsEvent(business.id, 'message_received', {
@@ -278,7 +313,7 @@ async function findOrCreateConversation(
     .select('*')
     .eq('business_id', businessId)
     .eq('customer_instagram_id', customerIgId)
-    .single();
+    .maybeSingle();
 
   if (existing) {
     // Reopen if closed

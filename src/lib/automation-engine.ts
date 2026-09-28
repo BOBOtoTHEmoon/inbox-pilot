@@ -250,24 +250,26 @@ async function executeResponse(
   }
 
   // Send via Instagram API
-  await sendInstagramMessage({
+  const sent = await sendInstagramMessage({
     recipientId: message.senderIgId,
     accessToken: business.instagram_access_token,
     igAccountId: business.instagram_account_id,
     message: igMessage,
   });
 
-  // Save bot message to database
-  await supabaseAdmin.from('messages').insert({
+  // Save bot message with Instagram's message ID. If the echo webhook for this
+  // message arrived first (saved as 'human'), this upsert corrects it to 'bot'.
+  await supabaseAdmin.from('messages').upsert({
     conversation_id: message.conversationId,
     business_id: message.businessId,
+    instagram_message_id: sent?.message_id || null,
     sender_type: 'bot',
     content: response.content || '[attachment]',
     message_type: response.message_type || 'text',
     attachments: response.attachments || [],
     quick_replies: response.quick_replies || null,
     automation_rule_id: ruleId,
-  });
+  }, { onConflict: 'instagram_message_id' });
 
   // Log bot reply event
   await logAnalyticsEvent(message.businessId, 'bot_reply_sent', {

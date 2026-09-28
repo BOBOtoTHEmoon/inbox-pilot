@@ -290,6 +290,7 @@ export interface IGMessagingEvent {
   timestamp: number;
   message?: {
     mid: string;
+    is_echo?: boolean;
     text?: string;
     attachments?: {
       type: string;

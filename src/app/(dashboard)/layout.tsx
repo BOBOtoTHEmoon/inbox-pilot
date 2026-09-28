@@ -11,8 +11,11 @@ import {
   Send,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 const navItems = [
   { href: '/inbox', label: 'Inbox', icon: Inbox },
@@ -27,7 +30,38 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // Only logged-in users can see the dashboard (customer DMs are private)
+  useEffect(() => {
+    // Demo mode (no Supabase configured locally): skip the login check
+    if (!isSupabaseConfigured) {
+      setCheckingAuth(false);
+      return;
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        router.replace('/login');
+      } else {
+        setCheckingAuth(false);
+      }
+    });
+  }, [router]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.replace('/login');
+  };
+
+  if (checkingAuth) {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-ink-muted">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -71,6 +105,15 @@ export default function DashboardLayout({
             );
           })}
         </nav>
+
+        {/* Sign out */}
+        <button
+          onClick={handleSignOut}
+          className="mx-2 mb-2 flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-ink-muted hover:bg-surface-overlay hover:text-ink transition-colors"
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Sign out</span>}
+        </button>
 
         {/* Collapse toggle */}
         <button
