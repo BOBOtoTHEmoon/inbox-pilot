@@ -21,9 +21,35 @@ export default function SettingsPage() {
   const [igUsername, setIgUsername] = useState<string | null>(null);
   const [shopifyStore, setShopifyStore] = useState<string | null>(null);
   const [loadingBusiness, setLoadingBusiness] = useState(true);
-    const [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
+  // Pull in recent DMs from Instagram (safe to run again; duplicates are skipped)
+  const handleImport = async () => {
+    setImporting(true);
+    setImportMessage(null);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch('/api/instagram/import', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionData.session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ businessId: BUSINESS_ID }),
+    });
+    const json = await res.json().catch(() => ({}));
+    setImporting(false);
+    if (!res.ok) {
+      setImportMessage(json.error || 'Import failed');
+      return;
+    }
+    setImportMessage(
+      `Imported ${json.conversations} conversations (${json.messages} new messages)` +
+        (json.errors?.length ? `, ${json.errors.length} could not be read` : '')
+    );
+  };
   // Ask the server for a signed "Connect Instagram" link for this business
   const getConnectLink = async (): Promise<string | null> => {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -156,9 +182,22 @@ export default function SettingsPage() {
               className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-ink-muted hover:bg-surface-overlay transition-colors"
             >
               {linkCopied ? <Check className="h-3.5 w-3.5" /> : <LinkIcon className="h-3.5 w-3.5" />}
-              {linkCopied ? 'Link copied' : 'Copy link to send to someone'}
+                            {linkCopied ? 'Link copied' : 'Copy link to send to someone'}
             </button>
+            {igUsername && (
+              <button
+                onClick={handleImport}
+                disabled={importing}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-ink-muted hover:bg-surface-overlay transition-colors disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${importing ? 'animate-spin' : ''}`} />
+                {importing ? 'Importing...' : 'Import recent DMs'}
+              </button>
+            )}
           </div>
+          {importMessage && (
+            <p className="mt-2 text-xs text-ink">{importMessage}</p>
+          )}
           <p className="mt-2 text-[11px] text-ink-muted">
             The link works for 7 days. Whoever opens it logs in to Instagram on their own device.
           </p>

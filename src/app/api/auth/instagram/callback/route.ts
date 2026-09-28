@@ -9,7 +9,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getLongLivedToken } from '@/lib/instagram';
 import { getAppUrl, getRedirectUri, readState } from '@/lib/instagram-connect';
+import { importRecentConversations } from '@/lib/instagram-import';
 
+// Connecting also imports recent DMs, which can take a little while
+export const maxDuration = 60;
 const GRAPH = 'https://graph.instagram.com/v21.0';
 
 function finish(params: Record<string, string>) {
@@ -106,9 +109,19 @@ export async function GET(request: NextRequest) {
         instagram_token_expires_at: expiresAt,
       })
       .eq('id', state.businessId);
-    if (saveError) throw new Error(`Saving failed: ${saveError.message}`);
+        if (saveError) throw new Error(`Saving failed: ${saveError.message}`);
 
-    return finish({ username: me.username });
+    // 7. Bring in recent DMs so the inbox isn't empty on day one.
+    //    If this fails, the account is still connected; it can be re-run from Settings.
+    let imported = 0;
+    try {
+      const result = await importRecentConversations(state.businessId);
+      imported = result.conversations;
+    } catch (importErr: any) {
+      await logError(`Import after connect failed: ${String(importErr?.message || importErr)}`);
+    }
+
+    return finish({ username: me.username, imported: String(imported) });
   } catch (err: any) {
     const message = String(err?.message || err);
     console.error('[Instagram connect]', message);
