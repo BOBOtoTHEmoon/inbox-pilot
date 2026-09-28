@@ -315,14 +315,30 @@ async function findOrCreateConversation(
     .eq('customer_instagram_id', customerIgId)
     .maybeSingle();
 
-  if (existing) {
+    if (existing) {
+    const updates: Record<string, any> = {};
+
     // Reopen if closed
     if (existing.status === 'closed') {
-      await supabaseAdmin
-        .from('conversations')
-        .update({ status: 'open', assigned_to: 'bot' })
-        .eq('id', existing.id);
+      updates.status = 'open';
+      updates.assigned_to = 'bot';
     }
+
+    // Retry the profile lookup if we don't have the customer's name yet
+    if (!existing.customer_username || existing.customer_username === 'unknown') {
+      const profile = await getInstagramProfile(customerIgId, accessToken);
+      if (profile.username && profile.username !== 'unknown') {
+        updates.customer_username = profile.username;
+        updates.customer_name = profile.name || null;
+        updates.customer_profile_pic = profile.profile_picture_url || null;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await supabaseAdmin.from('conversations').update(updates).eq('id', existing.id);
+      Object.assign(existing, updates);
+    }
+
     return { conversation: existing, isFirstMessage: false };
   }
 
