@@ -142,7 +142,7 @@ export default function AnalyticsPage() {
 
             {stats.received === 0 ? (
               <p className="py-10 text-center text-[13px] text-ink-muted">
-                No customer messages in this period yet. Charts will fill in as DMs arrive.
+                No customer messages in this period yet. Charts will fill in as messages arrive.
               </p>
             ) : (
               <>

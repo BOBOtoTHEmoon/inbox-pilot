@@ -12,6 +12,16 @@ import { useConversations } from '@/hooks/useConversations';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getConversationLabel, matchesFilter, type InboxFilter } from '@/lib/labels';
 import type { Conversation } from '@/types';
+import { ChannelIcon, type Channel } from '@/components/ui/ChannelIcon';
+
+type ChannelFilter = 'all' | Extract<Channel, 'instagram' | 'whatsapp' | 'email'>;
+
+const CHANNELS: { key: ChannelFilter; label: string; soon?: boolean }[] = [
+  { key: 'all', label: 'All channels' },
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'whatsapp', label: 'WhatsApp', soon: true },
+  { key: 'email', label: 'Email', soon: true },
+];
 
 // TODO: Replace with actual business ID from auth context
 const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID || 'demo';
@@ -30,6 +40,7 @@ function isTyping(target: EventTarget | null) {
 
 export default function InboxPage() {
   const [filter, setFilter] = useState<InboxFilter>('needs_reply');
+    const [channel, setChannel] = useState<ChannelFilter>('all');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -191,17 +202,49 @@ export default function InboxPage() {
               );
             })}
           </div>
+          
+          <div className="mt-2 flex gap-1.5 overflow-x-auto" aria-label="Filter by channel">
+            {CHANNELS.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => setChannel(c.key)}
+                aria-pressed={channel === c.key}
+                className={clsx(
+                  'flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                  channel === c.key ? 'border-surface-overlay bg-surface-overlay text-ink' : 'border-border text-ink-light hover:bg-surface-raised'
+                )}
+              >
+                {c.key !== 'all' && <ChannelIcon channel={c.key} />}
+                {c.label}
+                {c.soon && <span className="text-[10px] text-ink-muted">Soon</span>}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <ConversationList
-          conversations={visible}
-          filter={filter}
-          loading={loading}
-          selectedId={selectedId}
-          now={now}
-          searching={!!search.trim()}
-          onSelect={select}
-        />
+                {CHANNELS.find((c) => c.key === channel)?.soon ? (
+          <div className="flex flex-1 flex-col items-center justify-center px-8 pb-24 text-center">
+            <ChannelIcon channel={channel as Channel} className="h-6 w-6" />
+            <p className="mt-3 text-sm font-medium">
+              {channel === 'whatsapp' ? 'WhatsApp is coming soon' : 'Email is coming soon'}
+            </p>
+            <p className="mt-1 max-w-[17rem] text-[13px] leading-relaxed text-ink-muted">
+              {channel === 'whatsapp'
+                ? 'WhatsApp chats will sit here next to Instagram, sorted the same way.'
+                : 'Customer emails will sit here too, so you can follow up after Instagram’s 24 hours.'}
+            </p>
+          </div>
+        ) : (
+          <ConversationList
+            conversations={visible}
+            filter={filter}
+            loading={loading}
+            selectedId={selectedId}
+            now={now}
+            searching={!!search.trim()}
+            onSelect={select}
+          />
+        )}
       </section>
 
       {/* Open conversation. Full screen on phones, covering the tab bar */}

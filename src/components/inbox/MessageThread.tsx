@@ -2,9 +2,11 @@
 
 import { useState, useRef, useEffect, Fragment } from 'react';
 import { clsx } from 'clsx';
-import { ArrowUp, Instagram } from 'lucide-react';
+import { ArrowUp, Instagram, MessageSquareText } from 'lucide-react';
+import Link from 'next/link';
 import { useMessages } from '@/hooks/useMessages';
-import type { Conversation, Message } from '@/types';
+import { useReplyTemplates, fillTemplate } from '@/hooks/useReplyTemplates';
+import type { Conversation, Message, ReplyTemplate } from '@/types';
 import { getReplyWindow } from '@/lib/labels';
 import { describeAttachments } from '@/lib/attachments';
 import { clockTime, dayLabel } from '@/lib/time';
@@ -42,6 +44,30 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
 
   const replyWindow = getReplyWindow(conversation, now);
 
+  // Saved replies: type "/" (or tap the button) to pick one
+  const { templates, markUsed } = useReplyTemplates(businessId);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerIndex, setPickerIndex] = useState(0);
+  const slashQuery = draft.match(/^\/(\S*)$/)?.[1];
+  const showPicker = pickerOpen || slashQuery !== undefined;
+  const q = (slashQuery || '').toLowerCase();
+  const matches = templates
+    .filter((t) => !q || t.shortcut.includes(q) || t.name.toLowerCase().includes(q))
+    .slice(0, 6);
+
+  useEffect(() => setPickerIndex(0), [q, pickerOpen]);
+
+  const insertTemplate = (t: ReplyTemplate) => {
+    const text = fillTemplate(t.content, conversation.customer_name || conversation.customer_username);
+    setDraft(slashQuery !== undefined || !draft.trim() ? text : `${draft.trimEnd()} ${text}`);
+    setPickerOpen(false);
+    markUsed(t);
+    requestAnimationFrame(() => {
+      resizeInput();
+      inputRef.current?.focus();
+    });
+  };
+
   // Keep the newest message in view
   useEffect(() => {
     if (scrollRef.current) {
@@ -53,6 +79,7 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
   useEffect(() => {
     setDraft('');
     setSendError(null);
+    setPickerOpen(false);
     if (window.matchMedia('(min-width: 768px)').matches) inputRef.current?.focus();
   }, [conversation.id]);
 
@@ -80,6 +107,30 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Moving through the saved replies list
+    if (showPicker && matches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setPickerIndex((i) => (i + 1) % matches.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setPickerIndex((i) => (i - 1 + matches.length) % matches.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertTemplate(matches[pickerIndex] || matches[0]);
+        return;
+      }
+    }
+    if (showPicker && e.key === 'Escape') {
+      e.preventDefault();
+      setPickerOpen(false);
+      if (slashQuery !== undefined) setDraft('');
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -148,8 +199,7 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
                     ))}
 
                     {missingMedia && (
-                      <a
-                        href={instagramDmLink(conversation.customer_username)}
+                      <a href={instagramDmLink(conversation.customer_username)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="rounded-2xl border border-dashed border-border-strong px-3.5 py-2 text-[13px] text-ink-muted hover:bg-surface-raised"
@@ -195,8 +245,7 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
                 It has been over 24 hours since their last message, so Instagram only allows a reply
                 from the Instagram app. It will still show up here.
               </p>
-              <a
-                href={instagramDmLink(conversation.customer_username)}
+              <a href={instagramDmLink(conversation.customer_username)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-ink px-3.5 py-2 text-[13px] font-medium text-white hover:bg-accent-hover transition-colors"
@@ -207,7 +256,61 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
             </div>
           ) : (
             <>
+              <div className="relative">
+              {showPicker && (
+                <div className="absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-[0_12px_32px_rgba(22,22,26,0.14)]">
+                  <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                    <span className="text-xs font-medium text-ink-muted">Saved replies</span>
+                    <Link href="/automations" className="text-xs text-ink-muted hover:text-ink">
+                      Manage
+                    </Link>
+                  </div>
+                  {matches.length ? (
+                    <ul role="listbox" className="max-h-64 overflow-y-auto py-1">
+                      {matches.map((t, i) => (
+                        <li key={t.id} role="option" aria-selected={i === pickerIndex}>
+                          <button
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => insertTemplate(t)}
+                            onMouseEnter={() => setPickerIndex(i)}
+                            className={clsx(
+                              'flex w-full items-start gap-2.5 px-3 py-2 text-left',
+                              i === pickerIndex && 'bg-surface-raised'
+                            )}
+                          >
+                            <span className="mt-px shrink-0 rounded bg-surface-overlay px-1.5 py-0.5 font-mono text-[11px] text-ink">
+                              /{t.shortcut}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-[13px] font-medium">{t.name}</span>
+                              <span className="block truncate text-xs text-ink-muted">{t.content}</span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="px-3 py-3 text-[13px] text-ink-muted">
+                      {templates.length
+                        ? `No saved reply matches "/${slashQuery}".`
+                        : 'No saved replies yet. Add your common answers in Automations.'}
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface px-3 py-2 focus-within:border-border-strong transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen((v) => !v)}
+                  aria-label="Insert a saved reply"
+                  title="Saved replies (type /)"
+                  className={clsx(
+                    'mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+                    showPicker ? 'bg-surface-overlay text-ink' : 'text-ink-muted hover:bg-surface-overlay hover:text-ink'
+                  )}
+                >
+                  <MessageSquareText className="h-4 w-4" />
+                </button>
                 <label htmlFor="composer" className="sr-only">
                   Reply to {conversation.customer_name || conversation.customer_username}
                 </label>
@@ -220,7 +323,7 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
                     resizeInput();
                   }}
                   onKeyDown={handleKeyDown}
-                  placeholder="Write a reply"
+                  placeholder="Write a reply, or type / for saved replies"
                   rows={1}
                   className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-1.5 text-base md:text-[14px] leading-relaxed outline-none focus-visible:outline-none placeholder:text-ink-faint"
                 />
@@ -236,6 +339,7 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
                   <ArrowUp className="h-4 w-4" strokeWidth={2.4} />
                 </button>
               </div>
+              </div>
               <div className="mt-1.5 flex items-center justify-between px-1 text-[11px]">
                 {sendError ? (
                   <span className="text-danger">{sendError}</span>
@@ -244,7 +348,7 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
                     {replyWindow.text}
                   </span>
                 )}
-                <span className="hidden text-ink-faint md:inline">Enter to send, Shift + Enter for a new line</span>
+                <span className="hidden text-ink-faint md:inline">Enter to send, / for saved replies</span>
               </div>
             </>
           )}

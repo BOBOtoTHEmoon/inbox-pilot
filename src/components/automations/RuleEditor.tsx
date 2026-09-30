@@ -1,246 +1,245 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Plus, Minus } from 'lucide-react';
-import type { AutomationRule } from '@/types';
+import { clsx } from 'clsx';
+import { X } from 'lucide-react';
+import { Dialog } from '@/components/ui/Dialog';
+import { REPEAT_OPTIONS, TRIGGERS, type RuleDraft, type TriggerType } from '@/lib/rules';
 
 interface RuleEditorProps {
-  rule: AutomationRule | null; // null = creating new
-  onSave: (data: Partial<AutomationRule>) => Promise<void>;
+  initial: RuleDraft;
+  isNew: boolean;
+  onSave: (draft: RuleDraft) => Promise<string | null>;
+  onDelete?: () => void;
   onClose: () => void;
 }
 
-export function RuleEditor({ rule, onSave, onClose }: RuleEditorProps) {
-  const [name, setName] = useState(rule?.name || '');
-  const [triggerType, setTriggerType] = useState<string>(
-    rule?.trigger_type || 'keyword'
-  );
-  const [keywords, setKeywords] = useState<string[]>(
-    (rule?.trigger_config as any)?.keywords || ['']
-  );
-  const [matchMode, setMatchMode] = useState<string>(
-    (rule?.trigger_config as any)?.match_mode || 'fuzzy'
-  );
-  const [responseContent, setResponseContent] = useState(
-    (rule?.response as any)?.content || ''
-  );
-  const [priority, setPriority] = useState(rule?.priority || 5);
-  const [cooldown, setCooldown] = useState(rule?.cooldown_minutes || 15);
-  const [saving, setSaving] = useState(false);
+// Type a word and press Enter (or comma) to add it
+function WordsInput({ words, onChange }: { words: string[]; onChange: (w: string[]) => void }) {
+  const [text, setText] = useState('');
 
-  const handleSubmit = async () => {
-    if (!name.trim() || !responseContent.trim()) return;
-
-    setSaving(true);
-    const triggerConfig: any = { type: triggerType };
-
-    if (triggerType === 'keyword' || triggerType === 'comment') {
-      triggerConfig.keywords = keywords.filter((k) => k.trim());
-      if (triggerType === 'keyword') triggerConfig.match_mode = matchMode;
-    }
-
-    await onSave({
-      name: name.trim(),
-      trigger_type: triggerType as any,
-      trigger_config: triggerConfig,
-      response_type: 'single',
-      response: {
-        content: responseContent.trim(),
-        message_type: 'text',
-      },
-      priority,
-      cooldown_minutes: cooldown,
-      is_active: true,
-    });
-
-    setSaving(false);
+  const add = (raw: string) => {
+    const parts = raw
+      .split(',')
+      .map((p) => p.trim().toLowerCase())
+      .filter(Boolean)
+      .filter((p) => !words.includes(p));
+    if (parts.length) onChange([...words, ...parts]);
+    setText('');
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-sm">
-      <div className="mx-4 w-full max-w-lg rounded-2xl border border-border bg-surface shadow-xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold">
-            {rule ? 'Edit Rule' : 'New Automation Rule'}
-          </h2>
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border px-2 py-1.5 focus-within:border-ink">
+      {words.map((w) => (
+        <span key={w} className="flex items-center gap-1 rounded-md bg-surface-overlay py-1 pl-2 pr-1 text-[13px]">
+          {w}
           <button
-            onClick={onClose}
-            className="rounded-md p-1 text-ink-muted hover:bg-surface-overlay transition-colors"
+            type="button"
+            onClick={() => onChange(words.filter((x) => x !== w))}
+            aria-label={`Remove ${w}`}
+            className="flex h-5 w-5 items-center justify-center rounded text-ink-muted hover:bg-border hover:text-ink"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3 w-3" />
           </button>
-        </div>
+        </span>
+      ))}
+      <input
+        value={text}
+        onChange={(e) => {
+          if (e.target.value.endsWith(',')) add(e.target.value);
+          else setText(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            add(text);
+          } else if (e.key === 'Backspace' && !text && words.length) {
+            onChange(words.slice(0, -1));
+          }
+        }}
+        onBlur={() => text && add(text)}
+        placeholder={words.length ? 'Add another' : 'Type a word, then press Enter'}
+        className="h-8 min-w-[8rem] flex-1 bg-transparent px-1 text-base md:text-sm outline-none focus-visible:outline-none placeholder:text-ink-faint"
+      />
+    </div>
+  );
+}
 
-        {/* Body */}
-        <div className="max-h-[60vh] overflow-y-auto scrollbar-thin p-5 space-y-5">
-          {/* Name */}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-              Rule Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Pricing Inquiry"
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent transition-colors"
-            />
-          </div>
+export function RuleEditor({ initial, isNew, onSave, onDelete, onClose }: RuleEditorProps) {
+  const [draft, setDraft] = useState<RuleDraft>(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-          {/* Trigger Type */}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-              Trigger Type
-            </label>
-            <select
-              value={triggerType}
-              onChange={(e) => setTriggerType(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent transition-colors"
+  const set = <K extends keyof RuleDraft>(key: K, value: RuleDraft[K]) =>
+    setDraft((d) => ({ ...d, [key]: value }));
+
+  const trigger = TRIGGERS.find((t) => t.type === draft.trigger_type)!;
+  const needsWords = draft.trigger_type === 'keyword';
+  const allowsWords = needsWords || draft.trigger_type === 'comment' || draft.trigger_type === 'story_reply';
+
+  const exampleText =
+    draft.trigger_type === 'keyword' && draft.keywords[0]
+      ? `Hi, ${draft.keywords[0]}?`
+      : trigger.example;
+
+  const handleSave = async () => {
+    if (needsWords && draft.keywords.length === 0) {
+      setError('Add at least one word to listen for.');
+      return;
+    }
+    if (!draft.reply.trim()) {
+      setError('Write the reply that should be sent.');
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    const problem = await onSave(draft);
+    setSaving(false);
+    if (problem) setError(problem);
+  };
+
+  return (
+    <Dialog
+      title={isNew ? 'New auto-reply' : 'Edit auto-reply'}
+      onClose={onClose}
+      footer={
+        <div className="flex items-center gap-2">
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="mr-auto rounded-lg px-3 py-2 text-[13px] font-medium text-danger hover:bg-danger-light transition-colors"
             >
-              <option value="keyword">Keyword Match (DM contains keywords)</option>
-              <option value="comment">Comment-to-DM (comment triggers DM)</option>
-              <option value="story_reply">Story Reply</option>
-              <option value="first_message">First Message (new customer)</option>
-              <option value="after_hours">After Hours</option>
-            </select>
-          </div>
-
-          {/* Keywords (for keyword & comment triggers) */}
-          {(triggerType === 'keyword' || triggerType === 'comment') && (
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-                Keywords
-              </label>
-              <div className="space-y-2">
-                {keywords.map((kw, i) => (
-                  <div key={i} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={kw}
-                      onChange={(e) => {
-                        const next = [...keywords];
-                        next[i] = e.target.value;
-                        setKeywords(next);
-                      }}
-                      placeholder="e.g. price, how much"
-                      className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent transition-colors"
-                    />
-                    {keywords.length > 1 && (
-                      <button
-                        onClick={() =>
-                          setKeywords(keywords.filter((_, j) => j !== i))
-                        }
-                        className="rounded-lg p-2 text-ink-muted hover:bg-danger-light hover:text-danger transition-colors"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  onClick={() => setKeywords([...keywords, ''])}
-                  className="flex items-center gap-1.5 text-xs font-medium text-accent hover:text-accent-hover transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add keyword
-                </button>
-              </div>
-
-              {triggerType === 'keyword' && (
-                <div className="mt-3">
-                  <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-                    Match Mode
-                  </label>
-                  <div className="flex gap-2">
-                    {(['fuzzy', 'contains', 'exact'] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        onClick={() => setMatchMode(mode)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                          matchMode === mode
-                            ? 'bg-accent-light text-accent'
-                            : 'bg-surface-overlay text-ink-muted hover:text-ink'
-                        }`}
-                      >
-                        {mode === 'fuzzy'
-                          ? 'Fuzzy (typo-tolerant)'
-                          : mode === 'contains'
-                          ? 'Contains'
-                          : 'Exact Match'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+              Delete
+            </button>
           )}
-
-          {/* Response Content */}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-              Auto-Reply Message
-            </label>
-            <textarea
-              value={responseContent}
-              onChange={(e) => setResponseContent(e.target.value)}
-              placeholder="Type the message that will be sent automatically..."
-              rows={5}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent transition-colors resize-none"
-            />
-            <p className="mt-1 text-[11px] text-ink-muted">
-              {responseContent.length}/1000 characters
-            </p>
-          </div>
-
-          {/* Priority & Cooldown */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-                Priority (higher = checked first)
-              </label>
-              <input
-                type="number"
-                value={priority}
-                onChange={(e) => setPriority(Number(e.target.value))}
-                min={0}
-                max={100}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent transition-colors"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-                Cooldown (minutes)
-              </label>
-              <input
-                type="number"
-                value={cooldown}
-                onChange={(e) => setCooldown(Number(e.target.value))}
-                min={0}
-                max={1440}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent transition-colors"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
           <button
             onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-ink-muted hover:bg-surface-overlay transition-colors"
+            className={clsx(
+              'rounded-lg border border-border px-3 py-2 text-[13px] font-medium hover:bg-surface-raised',
+              !onDelete && 'ml-auto'
+            )}
           >
             Cancel
           </button>
           <button
-            onClick={handleSubmit}
-            disabled={!name.trim() || !responseContent.trim() || saving}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 transition-colors"
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-lg bg-ink px-4 py-2 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
           >
-            {saving ? 'Saving...' : rule ? 'Save Changes' : 'Create Rule'}
+            {saving ? 'Saving...' : isNew ? 'Turn on' : 'Save'}
           </button>
         </div>
+      }
+    >
+      <div className="space-y-6">
+        {/* When */}
+        <fieldset>
+          <legend className="mb-2 text-[13px] font-medium text-ink-light">When someone</legend>
+          <div className="space-y-1.5">
+            {TRIGGERS.map((t) => (
+              <label
+                key={t.type}
+                className={clsx(
+                  'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors',
+                  draft.trigger_type === t.type ? 'border-ink bg-surface-raised' : 'border-border hover:bg-surface-raised'
+                )}
+              >
+                <input
+                  type="radio"
+                  name="trigger"
+                  checked={draft.trigger_type === t.type}
+                  onChange={() => set('trigger_type', t.type as TriggerType)}
+                  className="mt-0.5 accent-[var(--color-ink)]"
+                />
+                <span>
+                  <span className="block text-sm font-medium">{t.title}</span>
+                  {draft.trigger_type === t.type && (
+                    <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">{t.help}</span>
+                  )}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {/* Words */}
+        {allowsWords && (
+          <div>
+            <p className="mb-2 text-[13px] font-medium text-ink-light">
+              {needsWords ? 'Words to listen for' : 'Only when they use these words (optional)'}
+            </p>
+            <WordsInput words={draft.keywords} onChange={(w) => set('keywords', w)} />
+          </div>
+        )}
+
+        {/* Reply */}
+        <label className="block">
+          <span className="mb-2 block text-[13px] font-medium text-ink-light">
+            {draft.trigger_type === 'comment' ? 'Send them this DM' : 'Reply with'}
+          </span>
+          <textarea
+            value={draft.reply}
+            onChange={(e) => set('reply', e.target.value)}
+            rows={4}
+            placeholder="Write the message customers will get"
+            className="w-full resize-none rounded-lg border border-border px-3 py-2.5 text-base md:text-sm leading-relaxed outline-none focus-visible:outline-none focus:border-ink placeholder:text-ink-faint"
+          />
+        </label>
+
+        {/* Preview */}
+        <div>
+          <p className="mb-2 text-[13px] font-medium text-ink-light">Preview</p>
+          <div className="space-y-2 rounded-xl bg-surface-raised p-4">
+            <div className="flex">
+              <span className="max-w-[80%] rounded-[18px] rounded-bl-md bg-surface-overlay px-3.5 py-2 text-sm">
+                {draft.trigger_type === 'comment' ? `Commented: ${exampleText}` : exampleText}
+              </span>
+            </div>
+            <div className="flex flex-col items-end">
+              <span className="mb-1 text-[11px] font-medium text-bot">Auto-reply</span>
+              <span className="max-w-[80%] whitespace-pre-wrap rounded-[18px] rounded-br-md bg-ink px-3.5 py-2 text-sm text-white">
+                {draft.reply.trim() || 'Your reply will appear here'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Details */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-[13px] font-medium text-ink-light">Name</span>
+            <input
+              value={draft.name}
+              onChange={(e) => set('name', e.target.value)}
+              placeholder="For example, Price questions"
+              className="h-10 w-full rounded-lg border border-border px-3 text-base md:text-sm outline-none focus-visible:outline-none focus:border-ink placeholder:text-ink-faint"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-[13px] font-medium text-ink-light">Reply to the same person</span>
+            <select
+              value={draft.cooldown_minutes}
+              onChange={(e) => set('cooldown_minutes', Number(e.target.value))}
+              className="h-10 w-full rounded-lg border border-border bg-surface px-2.5 text-base md:text-sm outline-none focus:border-ink"
+            >
+              {REPEAT_OPTIONS.map((o) => (
+                <option key={o.minutes} value={o.minutes}>
+                  {o.label}
+                </option>
+              ))}
+              {!REPEAT_OPTIONS.some((o) => o.minutes === draft.cooldown_minutes) && (
+                <option value={draft.cooldown_minutes}>Every {draft.cooldown_minutes} minutes</option>
+              )}
+            </select>
+          </label>
+        </div>
+
+        {error && (
+          <p role="alert" className="rounded-lg bg-danger-light px-3 py-2 text-[13px] text-danger">
+            {error}
+          </p>
+        )}
       </div>
-    </div>
+    </Dialog>
   );
 }

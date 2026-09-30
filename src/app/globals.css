@@ -36,11 +36,14 @@ body {
   font-feature-settings: 'ss01', 'cv11';
 }
 
-/* One visible focus style everywhere, only for keyboard users */
-:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-  border-radius: 6px;
+/* One visible focus style everywhere, only for keyboard users.
+   Inside a layer, so a component can switch it off with focus-visible:outline-none */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
 }
 
 /* Scrollbar styling */

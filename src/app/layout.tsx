@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'InboxPilot',
-  description: 'Every Instagram DM in one inbox, sorted by what needs a reply.',
+  description: 'One place for every customer, conversation and sale.',
 };
 
 export const viewport: Viewport = {

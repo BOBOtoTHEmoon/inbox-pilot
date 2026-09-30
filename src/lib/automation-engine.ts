@@ -19,6 +19,7 @@ interface IncomingMessage {
   businessId: string;
   conversationId: string;
   isFirstMessage: boolean;
+  isStoryReply?: boolean;
   timestamp: number;
 }
 
@@ -114,15 +115,16 @@ async function matchRule(
     case 'after_hours':
       return isAfterHours(business);
 
-    case 'story_reply':
-      // Story replies come with a specific attachment type
-      // For now, match any message if no keywords specified
+       case 'story_reply': {
+      // Only messages that are actually replies to one of the business's stories
+      if (!message.isStoryReply) return false;
       const storyConfig = rule.trigger_config as { keywords: string[] | null };
-      if (!storyConfig.keywords) return true;
+      if (!storyConfig.keywords || storyConfig.keywords.length === 0) return true;
       return matchKeywords(
         { type: 'keyword', keywords: storyConfig.keywords, match_mode: 'contains' },
         message.text
       );
+    }
 
     default:
       return false;

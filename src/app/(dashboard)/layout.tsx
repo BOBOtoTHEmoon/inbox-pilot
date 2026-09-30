@@ -3,39 +3,30 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { clsx } from 'clsx';
-import { Inbox, Zap, BarChart3, Settings, LogOut } from 'lucide-react';
+import { Inbox, Zap, BarChart3, Settings, LogOut, Users, Store, MoreHorizontal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-
+import { LogoMark } from '@/components/ui/LogoMark';
 const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID || 'demo';
 
+// Desktop sidebar
 const navItems = [
   { href: '/inbox', label: 'Inbox', icon: Inbox },
+  { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/sales', label: 'Sales', icon: Store },
   { href: '/automations', label: 'Automations', icon: Zap },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-function LogoMark({ className }: { className?: string }) {
-  // A speech bubble with a small "sent" tick cut into it
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <rect width="32" height="32" rx="9" fill="currentColor" />
-      <path
-        d="M9 11.5A3.5 3.5 0 0 1 12.5 8h7A3.5 3.5 0 0 1 23 11.5v5a3.5 3.5 0 0 1-3.5 3.5H15l-4.2 3.2c-.5.4-1.3 0-1.3-.6V20.6A3.5 3.5 0 0 1 9 17.5z"
-        fill="#fff"
-      />
-      <path
-        d="m12.8 14.2 2 2 4.4-4.4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+// Phone tab bar: five places, the rest live under More
+const phoneItems = [
+  { href: '/inbox', label: 'Inbox', icon: Inbox, match: ['/inbox'] },
+  { href: '/customers', label: 'Customers', icon: Users, match: ['/customers'] },
+  { href: '/sales', label: 'Sales', icon: Store, match: ['/sales'] },
+  { href: '/analytics', label: 'Insights', icon: BarChart3, match: ['/analytics'] },
+  { href: '/more', label: 'More', icon: MoreHorizontal, match: ['/more', '/automations', '/settings'] },
+];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -148,9 +139,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         aria-label="Main"
         className="md:hidden pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
       >
-        <div className="pointer-events-auto grid w-full max-w-md grid-cols-4 gap-1 rounded-full border border-white/70 bg-[rgba(239,239,241,0.62)] p-1.5 ring-1 ring-ink/[0.06] shadow-[0_10px_40px_rgba(22,22,26,0.16),0_2px_6px_rgba(22,22,26,0.06),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-2xl backdrop-saturate-[1.8]">
-          {navItems.map((item) => {
-            const active = pathname.startsWith(item.href);
+        <div className="pointer-events-auto grid w-full max-w-md grid-cols-5 gap-0.5 rounded-full border border-white/70 bg-[rgba(239,239,241,0.62)] p-1.5 ring-1 ring-ink/[0.06] shadow-[0_10px_40px_rgba(22,22,26,0.16),0_2px_6px_rgba(22,22,26,0.06),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-2xl backdrop-saturate-[1.8]">
+                      {phoneItems.map((item) => {
+              const active = item.match.some((m) => pathname.startsWith(m));
             const badge = item.href === '/inbox' && waiting > 0 ? waiting : null;
             return (
               <Link
@@ -158,7 +149,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
                 className={clsx(
-                  'relative flex flex-col items-center justify-center gap-0.5 rounded-full py-2 text-[11px] font-medium transition-colors',
+                  'relative flex flex-col items-center justify-center gap-0.5 rounded-full py-2 text-[10px] font-medium transition-colors',
                   active
                     ? 'bg-white text-ink shadow-[0_1px_4px_rgba(22,22,26,0.10)]'
                     : 'text-ink-muted active:bg-white/60'

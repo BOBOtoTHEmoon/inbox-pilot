@@ -1,8 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Send } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { LogoMark } from '@/components/ui/LogoMark';
+
+// Supabase's error messages, reworded for people
+function friendlyError(message: string) {
+  if (/invalid login credentials/i.test(message)) return 'That email and password do not match. Check both and try again.';
+  if (/email not confirmed/i.test(message)) return 'This account has not been confirmed yet. Ask the person who set it up.';
+  if (/network|fetch/i.test(message)) return 'Could not reach the server. Check your connection and try again.';
+  return message;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -12,6 +20,10 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.trim() || !password) {
+      setError('Enter your email and password.');
+      return;
+    }
     setError(null);
     setLoading(true);
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -20,65 +32,62 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (signInError) {
-      setError(signInError.message);
+      setError(friendlyError(signInError.message));
       return;
     }
     window.location.href = '/inbox';
   };
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-raised px-4">
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="mb-8 flex flex-col items-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
-            <Send className="h-6 w-6" />
-          </div>
-          <h1 className="text-xl font-semibold tracking-tight">InboxPilot</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            Instagram DM Automation
-          </p>
-        </div>
+  const inputClass =
+    'h-11 w-full rounded-lg border border-border bg-surface px-3 text-base md:text-sm outline-none focus-visible:outline-none focus:border-ink transition-colors placeholder:text-ink-faint';
 
-        {/* Form */}
-        <div className="rounded-2xl border border-border bg-surface p-6">
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent transition-colors"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent transition-colors"
-              />
-            </div>
-            {error && (
-              <p className="text-xs text-red-600">{error}</p>
-            )}
-            <button
-              onClick={handleLogin}
-              disabled={loading}
-              className="w-full rounded-lg bg-accent py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-60"
-            >
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
-          </div>
-        </div>
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-surface px-5 py-10">
+      <div className="w-full max-w-[360px]">
+        <LogoMark className="h-10 w-10 text-ink" />
+        <h1 className="mt-6 text-[22px] font-semibold tracking-[-0.02em]">Sign in to InboxPilot</h1>
+               <p className="mt-1.5 text-sm text-ink-muted">One place for every customer, conversation and sale.</p>
+        <form onSubmit={handleLogin} className="mt-8 space-y-4" noValidate>
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] font-medium text-ink-light">Email</span>
+            <input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@business.com"
+              className={inputClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] font-medium text-ink-light">Password</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          {error && (
+            <p role="alert" className="rounded-lg bg-danger-light px-3 py-2 text-[13px] text-danger">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="h-11 w-full rounded-lg bg-ink text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-60"
+          >
+            {loading ? 'Signing in...' : 'Sign in'}
+          </button>
+        </form>
+
+        <p className="mt-8 text-xs leading-relaxed text-ink-faint">
+          Forgot your password? Ask the person who set up your account to reset it.
+        </p>
       </div>
     </div>
   );

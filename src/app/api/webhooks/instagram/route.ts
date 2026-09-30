@@ -175,7 +175,8 @@ async function handleMessagingEvent(event: IGMessagingEvent, igAccountId: string
         text: messageText,
         businessId: business.id,
         conversationId: conversation.id,
-        isFirstMessage,
+                isFirstMessage,
+        isStoryReply: attachments.some((a) => a.type === 'story_reply'),
         timestamp: event.timestamp,
       },
       {
@@ -231,9 +232,10 @@ async function handleCommentEvent(
 
     // Check if comment matches keywords
     const commentLower = comment.text.toLowerCase();
-    const matches = keywords.some((kw: string) =>
-      commentLower.includes(kw.toLowerCase())
-    );
+        // No words set means "reply to every comment"
+    const matches =
+      keywords.length === 0 ||
+      keywords.some((kw: string) => commentLower.includes(kw.toLowerCase()));
 
     if (!matches) continue;
 

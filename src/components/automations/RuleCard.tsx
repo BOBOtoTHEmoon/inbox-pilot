@@ -1,131 +1,70 @@
 'use client';
 
-import {
-  MessageSquare,
-  MessageCircle,
-  Clock,
-  Star,
-  Reply,
-  Zap,
-  Pencil,
-  Trash2,
-  ToggleLeft,
-  ToggleRight,
-} from 'lucide-react';
 import { clsx } from 'clsx';
+import { MessageSquareText, Sparkles, Moon, CircleDashed, MessageCircle } from 'lucide-react';
 import type { AutomationRule } from '@/types';
+import { describeTrigger, ruleUseCount } from '@/lib/rules';
 
-const triggerIcons: Record<string, typeof MessageSquare> = {
-  keyword: MessageSquare,
+const ICONS = {
+  keyword: MessageSquareText,
+  first_message: Sparkles,
+  after_hours: Moon,
+  story_reply: CircleDashed,
   comment: MessageCircle,
-  story_reply: Reply,
-  first_message: Star,
-  after_hours: Clock,
-};
-
-const triggerLabels: Record<string, string> = {
-  keyword: 'Keyword Match',
-  comment: 'Comment-to-DM',
-  story_reply: 'Story Reply',
-  first_message: 'First Message',
-  after_hours: 'After Hours',
 };
 
 interface RuleCardProps {
   rule: AutomationRule;
   onEdit: () => void;
   onToggle: () => void;
-  onDelete: () => void;
 }
 
-export function RuleCard({ rule, onEdit, onToggle, onDelete }: RuleCardProps) {
-  const TriggerIcon = triggerIcons[rule.trigger_type] || Zap;
-  const triggerConfig = rule.trigger_config as any;
+// One auto-reply, read as a sentence: when this happens, reply with that
+export function RuleCard({ rule, onEdit, onToggle }: RuleCardProps) {
+  const Icon = ICONS[rule.trigger_type] || MessageSquareText;
+  const uses = ruleUseCount(rule);
+  const reply = (rule.response as any)?.content || '';
 
   return (
-    <div
-      className={clsx(
-        'group rounded-xl border p-4 transition-colors',
-        rule.is_active
-          ? 'border-border bg-surface hover:border-border-strong'
-          : 'border-border bg-surface-overlay/50 opacity-60'
-      )}
-    >
-      <div className="flex items-start justify-between gap-4">
-        {/* Left info */}
-        <div className="flex items-start gap-3 min-w-0">
-          <div
-            className={clsx(
-              'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-              rule.is_active ? 'bg-bot-light text-bot' : 'bg-surface-overlay text-ink-muted'
-            )}
-          >
-            <TriggerIcon className="h-4 w-4" />
-          </div>
+    <li className="flex items-start gap-3 px-4 py-4">
+      <span
+        className={clsx(
+          'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+          rule.is_active ? 'bg-surface-overlay text-ink' : 'bg-surface-raised text-ink-faint'
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
 
-          <div className="min-w-0">
-            <h3 className="text-sm font-medium">{rule.name}</h3>
-            <p className="mt-0.5 text-xs text-ink-muted">
-              {triggerLabels[rule.trigger_type]}
-              {triggerConfig?.keywords && (
-                <span>
-                  {' '}
-                  · Keywords:{' '}
-                  {triggerConfig.keywords.slice(0, 3).join(', ')}
-                  {triggerConfig.keywords.length > 3 &&
-                    ` +${triggerConfig.keywords.length - 3}`}
-                </span>
-              )}
-            </p>
+      <button onClick={onEdit} className="min-w-0 flex-1 text-left">
+        <p className={clsx('text-sm font-medium', !rule.is_active && 'text-ink-muted')}>{rule.name}</p>
+        <p className="mt-0.5 text-[13px] text-ink-muted">{describeTrigger(rule)}</p>
+        <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-ink-light">
+          <span className="text-ink-faint">Replies: </span>
+          {reply}
+        </p>
+        <p className="mt-2 text-xs text-ink-faint">
+          {rule.is_active ? (uses === 0 ? 'Not used yet' : uses === 1 ? 'Used once' : `Used ${uses} times`) : 'Off'}
+        </p>
+      </button>
 
-            {/* Response preview */}
-            {rule.response && (
-              <p className="mt-2 line-clamp-2 rounded-lg bg-surface-overlay px-3 py-2 text-xs text-ink-light">
-                {(rule.response as any).content?.slice(0, 120)}
-                {(rule.response as any).content?.length > 120 && '...'}
-              </p>
-            )}
-
-            {/* Stats */}
-            <div className="mt-2 flex items-center gap-3 text-[11px] text-ink-muted">
-              <span>Triggered {rule.stats?.triggered_count ?? (rule as any).triggered_count ?? 0} times</span>
-              <span>·</span>
-              <span>Priority {rule.priority}</span>
-              <span>·</span>
-              <span>{rule.cooldown_minutes}min cooldown</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right actions */}
-        <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={onEdit}
-            className="rounded-md p-1.5 text-ink-muted hover:bg-surface-overlay hover:text-ink transition-colors"
-            title="Edit"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={onDelete}
-            className="rounded-md p-1.5 text-ink-muted hover:bg-danger-light hover:text-danger transition-colors"
-            title="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={onToggle}
-            className="rounded-md p-1.5 transition-colors"
-            title={rule.is_active ? 'Disable' : 'Enable'}
-          >
-            {rule.is_active ? (
-              <ToggleRight className="h-5 w-5 text-success" />
-            ) : (
-              <ToggleLeft className="h-5 w-5 text-ink-muted" />
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+      <button
+        role="switch"
+        aria-checked={rule.is_active}
+        aria-label={rule.is_active ? `Turn off ${rule.name}` : `Turn on ${rule.name}`}
+        onClick={onToggle}
+        className={clsx(
+          'relative mt-1 h-5 w-9 shrink-0 rounded-full transition-colors',
+          rule.is_active ? 'bg-ink' : 'bg-border-strong'
+        )}
+      >
+        <span
+          className={clsx(
+            'absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+            rule.is_active ? 'translate-x-[18px]' : 'translate-x-0.5'
+          )}
+        />
+      </button>
+    </li>
   );
 }

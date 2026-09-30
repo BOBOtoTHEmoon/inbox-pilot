@@ -27,7 +27,7 @@ const EMPTY: Record<InboxFilter, { title: string; body: string }> = {
   },
   all_open: {
     title: 'No open conversations',
-    body: 'New Instagram DMs will appear here as they arrive.',
+        body: 'New messages will appear here as they arrive.',
   },
   closed: {
     title: 'Nothing marked done yet',
