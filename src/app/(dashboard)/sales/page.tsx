@@ -11,6 +11,7 @@ import { useCatalog, authHeaders, type CatalogProduct } from '@/hooks/useCatalog
 import { useCart } from '@/hooks/useCart';
 import { SalePanel, type SaleResult } from '@/components/sales/SalePanel';
 import { SaleDone } from '@/components/sales/SaleDone';
+import { SalesHistory } from '@/components/sales/SalesHistory';
 import { supabase } from '@/lib/supabase';
 import { VariantPicker } from '@/components/sales/VariantPicker';
 import { shortTime, timeAgo } from '@/lib/time';
@@ -359,7 +360,7 @@ function ProductPhoto({ src, className }: { src: string | null; className?: stri
   return <ProductImage className={className} />;
 }
 
-function LiveCatalog({ catalog }: { catalog: ReturnType<typeof useCatalog> }) {
+function LiveCatalog({ catalog, tabs }: { catalog: ReturnType<typeof useCatalog>; tabs: React.ReactNode }) {
   const { connection, products, syncing, error, refresh, reload } = catalog;
   const cart = useCart(BUSINESS_ID);
   const [category, setCategory] = useState('All');
@@ -447,10 +448,7 @@ function LiveCatalog({ catalog }: { catalog: ReturnType<typeof useCatalog> }) {
     <div className="flex h-full">
       <section className="flex min-w-0 flex-1 flex-col" aria-label="Products">
         <div className="border-b border-border px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-3 md:flex md:h-16 md:items-center md:justify-between md:px-6 md:py-0">
-          <div className="flex items-baseline gap-3">
-            <h1 className="text-[17px] font-semibold tracking-[-0.01em]">New sale</h1>
-            <span className="truncate text-xs text-ink-muted">{connection?.shop_name || connection?.shop_domain}</span>
-          </div>
+          {tabs}
           <div className="mt-2 flex items-center gap-3 md:mt-0">
             <span className="text-xs text-ink-muted">
               {syncing
@@ -652,8 +650,37 @@ function LiveCatalog({ catalog }: { catalog: ReturnType<typeof useCatalog> }) {
   );
 }
 
+type SalesView = 'sell' | 'history';
+
+// Switch between ringing up sales and looking back at them
+function SalesTabs({ view, onChange }: { view: SalesView; onChange: (v: SalesView) => void }) {
+  const tabs: { key: SalesView; label: string }[] = [
+    { key: 'sell', label: 'Sell' },
+    { key: 'history', label: 'History' },
+  ];
+  return (
+    <div className="flex items-center gap-1 rounded-lg bg-surface-raised p-1" role="tablist" aria-label="Sales">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          role="tab"
+          aria-selected={view === t.key}
+          onClick={() => onChange(t.key)}
+          className={clsx(
+            'rounded-md px-3.5 py-1.5 text-[13px] font-semibold transition-colors',
+            view === t.key ? 'bg-surface text-ink shadow-[0_1px_3px_rgba(22,22,26,0.10)]' : 'text-ink-muted hover:text-ink'
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function SalesPage() {
   const catalog = useCatalog(BUSINESS_ID);
+  const [view, setView] = useState<SalesView>('sell');
 
   if (catalog.loading) {
     return (
@@ -663,5 +690,23 @@ export default function SalesPage() {
     );
   }
 
-  return catalog.connection ? <LiveCatalog catalog={catalog} /> : <SalesPreview />;
+  if (!catalog.connection) return <SalesPreview />;
+
+  const tabs = <SalesTabs view={view} onChange={setView} />;
+  const shopName = catalog.connection.shop_name || 'Store';
+
+  if (view === 'history') {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex items-center border-b border-border px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-3 md:h-16 md:px-6 md:py-0">
+          {tabs}
+        </div>
+        <div className="flex-1 overflow-y-auto scrollbar-thin px-4 pt-5 pb-tabbar md:px-6">
+          <SalesHistory businessId={BUSINESS_ID} shopName={shopName} />
+        </div>
+      </div>
+    );
+  }
+
+  return <LiveCatalog catalog={catalog} tabs={tabs} />;
 }

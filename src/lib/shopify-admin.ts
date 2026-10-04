@@ -192,6 +192,18 @@ export async function shopForBusiness(businessId: string) {
   };
 }
 
+// The store's logo from Shopify (Settings > Brand), used on receipts. Empty if none is set.
+export async function fetchShopLogo(graphql: <T>(q: string, v?: Record<string, unknown>) => Promise<T>) {
+  try {
+    const data = await graphql<{
+      shop: { brand: { logo: { image: { url: string } | null } | null; squareLogo: { image: { url: string } | null } | null } | null };
+    }>(`query { shop { brand { logo { image { url } } squareLogo { image { url } } } } }`);
+    return data.shop.brand?.logo?.image?.url || data.shop.brand?.squareLogo?.image?.url || null;
+  } catch {
+    return null;
+  }
+}
+
 // Used when connecting: checks the details work and finds the shop's name and location
 export async function testShopify(domain: string, clientId: string, clientSecret: string) {
   const { token, expiresAt } = await requestClientCredentialsToken(domain, clientId, clientSecret);

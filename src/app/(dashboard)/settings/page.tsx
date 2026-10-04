@@ -7,6 +7,7 @@ import { clsx } from 'clsx';
 import { Instagram, Link as LinkIcon, RefreshCw, Check, LogOut, ShoppingBag, Mail, MessageCircle, Store } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { ShopifySection } from '@/components/settings/ShopifySection';
+import { ReceiptSection } from '@/components/settings/ReceiptSection';
 
 const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID || 'demo';
 
@@ -268,6 +269,11 @@ export default function SettingsPage() {
             description="Your products and stock, for the Sales screen. Sales made here update Shopify stock."
           >
             <ShopifySection businessId={BUSINESS_ID} />
+          </Section>
+
+                    {/* Receipts */}
+          <Section title="Receipts" description="Your logo and a short note at the bottom of every customer receipt.">
+            <ReceiptSection businessId={BUSINESS_ID} />
           </Section>
 
           {/* Coming soon */}

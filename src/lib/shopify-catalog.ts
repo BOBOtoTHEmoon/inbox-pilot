@@ -1,12 +1,5 @@
-// ============================================
-// SHOPIFY CATALOGUE SYNC
-// Server only. Pulls every active product and variant from a business's
-// Shopify store and saves a copy in products / product_variants.
-// The normalising rules come from the AuraUp in-store app.
-// ============================================
-
 import { supabaseAdmin } from '@/lib/supabase';
-import { shopForBusiness } from '@/lib/shopify-admin';
+import { shopForBusiness, fetchShopLogo } from '@/lib/shopify-admin';
 
 const PRODUCTS_QUERY = /* GraphQL */ `
   query CatalogProducts($cursor: String) {
@@ -189,6 +182,17 @@ export async function syncCatalog(businessId: string) {
       .from('shop_connections')
       .update({ last_synced_at: syncedAt, last_sync_error: null })
       .eq('business_id', businessId);
+
+    // Use the Shopify logo on receipts unless the business has chosen its own
+    const { data: biz } = await supabaseAdmin
+      .from('businesses')
+      .select('receipt_logo_url')
+      .eq('id', businessId)
+      .maybeSingle();
+    if (biz && !biz.receipt_logo_url) {
+      const logo = await fetchShopLogo(shop.graphql);
+      if (logo) await supabaseAdmin.from('businesses').update({ receipt_logo_url: logo }).eq('id', businessId);
+    }
 
     return { products: productRows.length, variants: variantRows.length, syncedAt };
   } catch (err: any) {

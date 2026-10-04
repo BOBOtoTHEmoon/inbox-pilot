@@ -172,8 +172,13 @@ export async function adjustStock(
   }
 }
 
-// Keep our catalogue copy in step after a sale, so the screen shows the new stock
-async function reduceLocalStock(businessId: string, lines: { external_variant_id: string; quantity: number }[]) {
+// Keep our catalogue copy in step after a sale or a void, so the screen shows the new stock.
+// direction -1 takes stock off (a sale), +1 puts it back (a void).
+async function changeLocalStock(
+  businessId: string,
+  lines: { external_variant_id: string; quantity: number }[],
+  direction: 1 | -1
+) {
   for (const line of lines) {
     const { data } = await supabaseAdmin
       .from('product_variants')
@@ -182,7 +187,10 @@ async function reduceLocalStock(businessId: string, lines: { external_variant_id
       .eq('external_id', line.external_variant_id)
       .maybeSingle();
     if (data) {
-      await supabaseAdmin.from('product_variants').update({ stock: data.stock - line.quantity }).eq('id', data.id);
+      await supabaseAdmin
+        .from('product_variants')
+        .update({ stock: data.stock + direction * line.quantity })
+        .eq('id', data.id);
     }
   }
 }
@@ -211,7 +219,7 @@ export async function pushSaleStock(businessId: string, saleId: string) {
       sale.id
     );
     await supabaseAdmin.from('sales').update({ inventory_synced: true, inventory_error: null }).eq('id', sale.id);
-    await reduceLocalStock(businessId, sale.sale_items as any[]);
+        await changeLocalStock(businessId, sale.sale_items as any[], -1);
     return { ok: true };
   } catch (err: any) {
     const message = String(err?.message || err);
@@ -354,4 +362,49 @@ export async function createSale(businessId: string, userId: string, input: Sale
   const stock = await pushSaleStock(businessId, sale.id);
 
   return { sale: { ...sale, inventory_synced: stock.ok, inventory_error: stock.ok ? null : stock.error }, items: lines };
+}
+
+
+// ── Voiding a sale ──
+
+export async function voidSale(businessId: string, saleId: string, reason: string | null) {
+  const { data: sale } = await supabaseAdmin
+    .from('sales')
+    .select('id, sale_number, status, inventory_synced, void_key, sale_items(inventory_item_id, quantity, external_variant_id)')
+    .eq('id', saleId)
+    .eq('business_id', businessId)
+    .maybeSingle();
+  if (!sale) throw new ValidationError('Sale not found.');
+  if (sale.status === 'voided') return { ok: true, alreadyVoided: true };
+
+  if (sale.inventory_synced) {
+    const voidKey = sale.void_key || crypto.randomUUID();
+    if (!sale.void_key) {
+      await supabaseAdmin.from('sales').update({ void_key: voidKey }).eq('id', sale.id);
+    }
+    const shop = await shopForBusiness(businessId);
+    await adjustStock(
+      shop,
+      (sale.sale_items as any[])
+        .filter((l) => l.inventory_item_id)
+        .map((l) => ({ inventoryItemId: l.inventory_item_id, delta: l.quantity })),
+      `${sale.sale_number}-void`,
+      voidKey
+    );
+    await changeLocalStock(businessId, sale.sale_items as any[], 1);
+  }
+
+  // A sale that never reached Shopify had no stock taken, so there is nothing to put back
+  const { error } = await supabaseAdmin
+    .from('sales')
+    .update({
+      status: 'voided',
+      voided_at: new Date().toISOString(),
+      void_reason: reason ? reason.slice(0, 300) : null,
+      inventory_synced: true,
+      inventory_error: null,
+    })
+    .eq('id', sale.id);
+  if (error) throw error;
+  return { ok: true };
 }

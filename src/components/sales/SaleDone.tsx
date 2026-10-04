@@ -1,14 +1,11 @@
 'use client';
-
-// Shown after a sale is recorded: the number, the total, whether Shopify stock
-// was updated, and a quick WhatsApp receipt for the customer.
-
 import { useState } from 'react';
-import { Check, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Check, AlertTriangle, RefreshCw, Receipt as ReceiptIcon } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { authHeaders } from '@/hooks/useCatalog';
 import { naira } from '@/lib/sample-data';
 import type { SaleResult } from './SalePanel';
+import { Receipt } from './Receipt';
 
 const PAYMENT_NAMES: Record<string, string> = { transfer: 'transfer', card: 'card', cash: 'cash' };
 
@@ -47,6 +44,7 @@ export function SaleDone({
   const [synced, setSynced] = useState(result.sale.inventory_synced);
   const [stockError, setStockError] = useState(result.sale.inventory_error);
   const [retrying, setRetrying] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
 
   const retry = async () => {
     setRetrying(true);
@@ -62,6 +60,28 @@ export function SaleDone({
       setStockError(null);
     }
   };
+
+    if (showReceipt) {
+    return (
+      <Receipt
+        businessId={businessId}
+        shopName={shopName}
+        onClose={() => setShowReceipt(false)}
+        data={{
+          saleNumber: result.sale.sale_number,
+          createdAt: result.sale.created_at,
+          items: result.items,
+          subtotal: Number(result.sale.subtotal),
+          discount: Number(result.sale.discount),
+          total: Number(result.sale.total),
+          paymentMethod: result.sale.payment_method,
+          customerName:
+            result.customer?.name && result.customer.name !== 'Walk-in customer' ? result.customer.name : null,
+          staffName: result.staffName,
+        }}
+      />
+    );
+  }
 
   const phoneDigits = result.customer?.phone.replace(/\D/g, '');
   const whatsappLink = phoneDigits
@@ -107,11 +127,20 @@ export function SaleDone({
           </div>
         )}
 
-        {whatsappLink && (
-          <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="flex h-11 items-center justify-center rounded-xl border border-border text-sm font-medium hover:bg-surface-raised">
-            Send receipt on WhatsApp
-          </a>
-        )}
+        <div className="grid gap-2">
+          <button
+            onClick={() => setShowReceipt(true)}
+            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-border text-sm font-medium hover:bg-surface-raised"
+          >
+            <ReceiptIcon className="h-4 w-4" />
+            PDF receipt
+          </button>
+          {whatsappLink && (
+            <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="flex h-11 items-center justify-center rounded-xl border border-border text-sm font-medium hover:bg-surface-raised">
+              Text receipt on WhatsApp
+            </a>
+          )}
+        </div>
       </div>
     </Dialog>
   );
