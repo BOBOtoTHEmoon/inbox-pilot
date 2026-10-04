@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { clsx } from 'clsx';
 import { Instagram, Link as LinkIcon, RefreshCw, Check, LogOut, ShoppingBag, Mail, MessageCircle, Store } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { ShopifySection } from '@/components/settings/ShopifySection';
 
 const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID || 'demo';
 
@@ -261,6 +262,14 @@ export default function SettingsPage() {
             </p>
           </Section>
 
+          {/* Shopify */}
+          <Section
+            title="Shopify"
+            description="Your products and stock, for the Sales screen. Sales made here update Shopify stock."
+          >
+            <ShopifySection businessId={BUSINESS_ID} />
+          </Section>
+
           {/* Coming soon */}
                     <Section
             title="Connections"
@@ -270,7 +279,6 @@ export default function SettingsPage() {
               {[
                 { icon: MessageCircle, name: 'WhatsApp', text: 'WhatsApp chats in the same inbox' },
                 { icon: Mail, name: 'Email', text: 'Send and receive customer emails from the inbox' },
-                { icon: ShoppingBag, name: 'Shopify', text: 'Products, orders and payment links from a chat' },
                 { icon: Store, name: 'Point of sale', text: 'In-store sales on each customer’s history' },
               ].map((item) => (
                 <li key={item.name} className="flex items-center gap-3 px-3 py-3">
