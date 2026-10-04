@@ -12,6 +12,7 @@ import { useCart } from '@/hooks/useCart';
 import { SalePanel, type SaleResult } from '@/components/sales/SalePanel';
 import { SaleDone } from '@/components/sales/SaleDone';
 import { SalesHistory } from '@/components/sales/SalesHistory';
+import { StockView } from '@/components/sales/StockView';
 import { supabase } from '@/lib/supabase';
 import { VariantPicker } from '@/components/sales/VariantPicker';
 import { shortTime, timeAgo } from '@/lib/time';
@@ -650,13 +651,14 @@ function LiveCatalog({ catalog, tabs }: { catalog: ReturnType<typeof useCatalog>
   );
 }
 
-type SalesView = 'sell' | 'history';
+type SalesView = 'sell' | 'history' | 'stock';
 
 // Switch between ringing up sales and looking back at them
 function SalesTabs({ view, onChange }: { view: SalesView; onChange: (v: SalesView) => void }) {
   const tabs: { key: SalesView; label: string }[] = [
     { key: 'sell', label: 'Sell' },
     { key: 'history', label: 'History' },
+    { key: 'stock', label: 'Stock' },
   ];
   return (
     <div className="flex items-center gap-1 rounded-lg bg-surface-raised p-1" role="tablist" aria-label="Sales">
@@ -695,14 +697,18 @@ export default function SalesPage() {
   const tabs = <SalesTabs view={view} onChange={setView} />;
   const shopName = catalog.connection.shop_name || 'Store';
 
-  if (view === 'history') {
+  if (view === 'history' || view === 'stock') {
     return (
       <div className="flex h-full flex-col">
         <div className="flex items-center border-b border-border px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-3 md:h-16 md:px-6 md:py-0">
           {tabs}
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-thin px-4 pt-5 pb-tabbar md:px-6">
-          <SalesHistory businessId={BUSINESS_ID} shopName={shopName} />
+          {view === 'history' ? (
+            <SalesHistory businessId={BUSINESS_ID} shopName={shopName} />
+          ) : (
+            <StockView businessId={BUSINESS_ID} products={catalog.products} onChanged={catalog.reload} />
+          )}
         </div>
       </div>
     );

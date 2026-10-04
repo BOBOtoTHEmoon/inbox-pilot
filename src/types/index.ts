@@ -34,6 +34,7 @@ export interface Conversation {
     ai_label?: 'ready_to_buy' | 'interested' | 'support' | 'browsing' | null;
   ai_summary?: string | null;
   ai_labeled_at?: string | null; 
+    customer_id?: string | null;
   is_read: boolean;
   tags: string[];
   customer_email: string | null;

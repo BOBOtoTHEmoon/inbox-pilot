@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { naira } from '@/lib/sample-data';
 import { clsx } from 'clsx';
-import { X, AtSign, Mail, Phone } from 'lucide-react';
+import { X, AtSign, Mail, Phone, Store, ChevronRight } from 'lucide-react';
 import type { Conversation } from '@/types';
 import { getReplyWindow } from '@/lib/labels';
 import { Avatar } from './Avatar';
@@ -78,6 +81,30 @@ export function CustomerPanel({ conversation, now, onUpdate, onClose, className 
   const autoReplies = conversation.assigned_to === 'bot';
 
   useEffect(() => setNotesDraft(notes), [notes, conversation.id]);
+  
+  // Shop purchases by the same person (joined by phone number)
+  const router = useRouter();
+  const [shop, setShop] = useState<{ count: number; spent: number } | null>(null);
+  useEffect(() => {
+    setShop(null);
+    if (!isSupabaseConfigured || !conversation.customer_id) return;
+    supabase
+      .from('sales')
+      .select('total, status')
+      .eq('customer_id', conversation.customer_id)
+      .then(({ data }) => {
+        const done = (data || []).filter((s: any) => s.status === 'completed');
+        setShop({ count: done.length, spent: done.reduce((sum: number, s: any) => sum + Number(s.total), 0) });
+      });
+  }, [conversation.customer_id]);
+
+  const openProfile = () => {
+    if (!conversation.customer_id) return;
+    try {
+      localStorage.setItem('inboxpilot.openCustomer', conversation.customer_id);
+    } catch {}
+    router.push('/customers');
+  };
 
   return (
     <aside
@@ -118,6 +145,32 @@ export function CustomerPanel({ conversation, now, onUpdate, onClose, className 
             </a>
           )}
         </div>
+
+                {/* Shop purchases and the full profile */}
+        {conversation.customer_id && (
+          <button
+            onClick={openProfile}
+            className="flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left hover:bg-surface-raised"
+          >
+            <Store className="h-4 w-4 shrink-0 text-ink-muted" />
+            <span className="min-w-0 flex-1 text-[13px]">
+              {shop && shop.count > 0 ? (
+                <>
+                  <span className="font-medium">
+                    {shop.count} shop {shop.count === 1 ? 'purchase' : 'purchases'}, {naira(shop.spent)}
+                  </span>
+                  <span className="block text-xs text-ink-muted">View customer profile</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">View customer profile</span>
+                  <span className="block text-xs text-ink-muted">Add their phone to link shop purchases</span>
+                </>
+              )}
+            </span>
+            <ChevronRight className="h-4 w-4 text-ink-faint" />
+          </button>
+        )}
 
         {/* Instagram's 24-hour rule, in plain words */}
         <div>

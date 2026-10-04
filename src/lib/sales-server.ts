@@ -408,3 +408,87 @@ export async function voidSale(businessId: string, saleId: string, reason: strin
   if (error) throw error;
   return { ok: true };
 }
+
+// ── Stock screen: reading and setting quantities at the shop location ──
+
+const SET_MUTATION = /* GraphQL */ `
+  mutation SetStock($input: InventorySetQuantitiesInput!, $key: String!) {
+    inventorySetQuantities(input: $input) @idempotent(key: $key) {
+      inventoryAdjustmentGroup { createdAt }
+      userErrors { field message code }
+    }
+  }
+`;
+
+// Current "available" stock at the shop location, per inventory item
+export async function readLocationStock(businessId: string, inventoryItemIds: string[]) {
+  const shop = await shopForBusiness(businessId);
+  const locationId = shop.connection.location_id;
+  if (!locationId) throw new ShopifyError('Choose the shop location in Settings, under Shopify, first.');
+  const ids = [...new Set(inventoryItemIds.filter(Boolean))];
+  const result: Record<string, number | null> = {};
+  for (let i = 0; i < ids.length; i += 50) {
+    const data = await shop.graphql<{
+      nodes: ({ id: string; inventoryLevel: { quantities: { name: string; quantity: number }[] } | null } | null)[];
+    }>(LEVELS_QUERY, { ids: ids.slice(i, i + 50), locationId });
+    for (const node of data.nodes) {
+      if (!node) continue;
+      const available = node.inventoryLevel?.quantities.find((q) => q.name === 'available');
+      // null means this variant isn't stocked at the shop location at all
+      result[node.id] = available ? available.quantity : null;
+    }
+  }
+  return result;
+}
+
+// Set an exact quantity. Uses compare-and-swap: if a sale changed the stock since
+// the screen loaded, Shopify refuses and the person sees the real number instead.
+export async function setLocationStock(
+  businessId: string,
+  inventoryItemId: string,
+  quantity: number,
+  expectedCurrent: number
+) {
+  if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100000) {
+    throw new ValidationError('Stock must be a whole number, 0 or more.');
+  }
+  const shop = await shopForBusiness(businessId);
+  const locationId = shop.connection.location_id;
+  if (!locationId) throw new ShopifyError('Choose the shop location in Settings, under Shopify, first.');
+
+  const data = await shop.graphql<{
+    inventorySetQuantities: { userErrors: { message: string; code?: string }[] };
+  }>(SET_MUTATION, {
+    key: crypto.randomUUID(),
+    input: {
+      name: 'available',
+      reason: 'correction',
+      referenceDocumentUri: `logistics://inboxpilot/stock/${Date.now()}`,
+      quantities: [{ inventoryItemId, locationId, quantity, changeFromQuantity: expectedCurrent }],
+    },
+  });
+
+  const errors = data.inventorySetQuantities.userErrors || [];
+  if (errors.some((e) => /stale/i.test(e.code || '') || /stale/i.test(e.message))) {
+    throw new ValidationError('The stock changed since this screen loaded, probably a sale. It has been refreshed; check and try again.');
+  }
+  if (errors.some((e) => e.code === 'INVENTORY_ITEM_NOT_STOCKED_AT_LOCATION')) {
+    throw new ValidationError('This variant is not stocked at the shop location. Turn that location on for it in Shopify first.');
+  }
+  if (errors.length) throw new ShopifyError(errors.map((e) => e.message).join('; '));
+
+  // Keep our catalogue copy in step (it holds the total across locations)
+  const { data: variant } = await supabaseAdmin
+    .from('product_variants')
+    .select('id, stock')
+    .eq('business_id', businessId)
+    .eq('inventory_item_id', inventoryItemId)
+    .maybeSingle();
+  if (variant) {
+    await supabaseAdmin
+      .from('product_variants')
+      .update({ stock: variant.stock + (quantity - expectedCurrent) })
+      .eq('id', variant.id);
+  }
+  return { quantity };
+}

@@ -6,6 +6,7 @@ import { processIncomingMessage, logAnalyticsEvent } from '@/lib/automation-engi
 import type { IGWebhookEvent, IGMessagingEvent, IGChangeEvent } from '@/types';
 import { attachmentsFromWebhook, describeAttachments } from '@/lib/attachments';
 import { labelConversation } from '@/lib/ai-labels';
+import { linkConversation } from '@/lib/customers';
 
 // ── Webhook Verification (GET) ──
 export async function GET(request: NextRequest) {
@@ -156,8 +157,12 @@ async function handleMessagingEvent(event: IGMessagingEvent, igAccountId: string
   // Echoes stop here: no analytics as "received", no automation
   if (isEcho) return;
   
-  // Tag the conversation with AI after the response is sent, so Meta isn't kept waiting
-  after(() => labelConversation(conversation.id));
+  // After the response is sent (so Meta isn't kept waiting): join the conversation
+  // to its customer profile, then tag it with AI
+  after(async () => {
+    if (!conversation.customer_id) await linkConversation(conversation.id);
+    await labelConversation(conversation.id);
+  });
 
   // 4. Log analytics
   await logAnalyticsEvent(business.id, 'message_received', {

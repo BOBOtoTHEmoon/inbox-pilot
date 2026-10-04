@@ -25,10 +25,12 @@ interface FoundCustomer {
   id: string;
   name: string;
   phone: string;
+   instagram_username: string | null;
   visits: number;
   spent: number;
   lastVisit: string | null;
   favourite: string | null;
+  
 }
 
 export interface SaleResult {
@@ -273,6 +275,7 @@ export function SalePanel({
               Returning customer: {found.visits} {found.visits === 1 ? 'visit' : 'visits'}, {naira(found.spent)} spent
             </p>
             {found.favourite && <p className="text-xs">Usually buys {found.favourite}</p>}
+                        {found.instagram_username && <p className="text-xs">On Instagram as @{found.instagram_username}</p>}
           </div>
         )}
       </div>

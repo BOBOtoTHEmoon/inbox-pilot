@@ -60,6 +60,34 @@ export default function InboxPage() {
     return () => clearInterval(timer);
   }, []);
 
+    // Opened from a customer profile: show that conversation
+  useEffect(() => {
+    try {
+      const wanted = localStorage.getItem('inboxpilot.openConversation');
+      if (wanted) {
+        setFilter('all_open');
+        setSelectedId(wanted);
+        localStorage.removeItem('inboxpilot.openConversation');
+      }
+    } catch {}
+  }, []);
+
+  // Save a conversation change; new contact details also join it to the customer profile
+  const updateAndLink = async (conversationId: string, fields: Partial<Conversation>) => {
+    await updateConversation(conversationId, fields);
+    if (isSupabaseConfigured && ('customer_phone' in fields || 'customer_email' in fields)) {
+      const { data } = await supabase.auth.getSession();
+      fetch('/api/customers/link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${data.session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ businessId: BUSINESS_ID, conversationId }),
+      }).catch(() => {});
+    }
+  };
+
     // Ask the AI to tag conversations that have no label yet (for example, just imported).
   // Runs once per visit; new messages are tagged as they arrive.
   const labelled = useRef(false);
@@ -303,7 +331,7 @@ export default function InboxPage() {
         <CustomerPanel
           conversation={selected}
           now={now}
-          onUpdate={(fields) => updateConversation(selected.id, fields)}
+                      onUpdate={(fields) => updateAndLink(selected.id, fields)}
           className="hidden xl:flex"
         />
       )}
@@ -317,7 +345,7 @@ export default function InboxPage() {
           <CustomerPanel
             conversation={selected}
             now={now}
-            onUpdate={(fields) => updateConversation(selected.id, fields)}
+            onUpdate={(fields) => updateAndLink(selected.id, fields)}
             onClose={() => setDetailsOpen(false)}
             className="relative flex h-full w-full max-w-[360px] animate-panel-in shadow-[-8px_0_24px_rgba(22,22,26,0.08)]"
           />
