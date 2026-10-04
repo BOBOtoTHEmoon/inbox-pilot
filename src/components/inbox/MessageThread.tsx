@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect, Fragment } from 'react';
 import { clsx } from 'clsx';
-import { ArrowUp, Instagram, MessageSquareText } from 'lucide-react';
+import { ArrowUp, Instagram, MessageSquareText, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useMessages } from '@/hooks/useMessages';
 import { useReplyTemplates, fillTemplate } from '@/hooks/useReplyTemplates';
 import type { Conversation, Message, ReplyTemplate } from '@/types';
-import { getReplyWindow } from '@/lib/labels';
+import { AI_LABELS, getReplyWindow } from '@/lib/labels';
 import { describeAttachments } from '@/lib/attachments';
 import { clockTime, dayLabel } from '@/lib/time';
 import { AttachmentView } from './AttachmentView';
@@ -151,6 +151,14 @@ export function MessageThread({ conversation, businessId, now }: MessageThreadPr
           </div>
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col px-4 py-6 md:px-8">
+                        {conversation.ai_label && conversation.ai_summary && AI_LABELS[conversation.ai_label] && (
+              <div className={clsx('mb-4 flex items-start gap-2.5 rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed', AI_LABELS[conversation.ai_label].strip)}>
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  <span className="font-semibold">{AI_LABELS[conversation.ai_label].text}.</span> {conversation.ai_summary}
+                </p>
+              </div>
+            )}
             {messages.map((msg, i) => {
               const prev = messages[i - 1];
               const next = messages[i + 1];

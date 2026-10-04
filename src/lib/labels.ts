@@ -87,3 +87,15 @@ export function matchesFilter(conv: Conversation, filter: InboxFilter, now: numb
   if (filter === 'all_open') return true;
   return getConversationLabel(conv, now)?.key === filter;
 }
+
+
+// AI buyer labels: what the person seems to want, read by Claude
+export const AI_LABELS: Record<
+  NonNullable<Conversation['ai_label']>,
+  { text: string; className: string; strip: string }
+> = {
+  ready_to_buy: { text: 'Ready to buy', className: 'bg-success-light text-success', strip: 'bg-success-light text-success' },
+  interested: { text: 'Interested', className: 'bg-[#eef2fd] text-[#2b4fc7]', strip: 'bg-[#eef2fd] text-[#2b4fc7]' },
+  support: { text: 'Support', className: 'bg-surface-overlay text-ink-light', strip: 'bg-surface-raised text-ink-light' },
+  browsing: { text: 'Just browsing', className: 'bg-surface-overlay text-ink-muted', strip: 'bg-surface-raised text-ink-muted' },
+};

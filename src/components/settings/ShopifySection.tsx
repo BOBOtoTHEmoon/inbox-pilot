@@ -9,7 +9,7 @@ import { clsx } from 'clsx';
 import { ShoppingBag, RefreshCw } from 'lucide-react';
 import { authHeaders, type ShopConnection } from '@/hooks/useCatalog';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { shortTime } from '@/lib/time';
+import { timeAgo } from '@/lib/time';
 
 const buttonSecondary =
   'flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[13px] font-medium text-ink hover:bg-surface-raised transition-colors disabled:opacity-60';
@@ -138,7 +138,7 @@ export function ShopifySection({ businessId }: { businessId: string }) {
             <p className="truncate text-sm font-medium">{connection.shop_name || connection.shop_domain}</p>
             <p className="truncate text-xs text-ink-muted">
               {productCount} products
-              {connection.last_synced_at ? `, updated ${shortTime(connection.last_synced_at)} ago` : ''}
+                         {connection.last_synced_at ? `, updated ${timeAgo(connection.last_synced_at)}` : ''}
             </p>
           </div>
           <span className="flex items-center gap-1 text-xs text-success">

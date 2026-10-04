@@ -1,16 +1,11 @@
-// ============================================
-// INSTAGRAM WEBHOOK HANDLER
-// POST /api/webhooks/instagram
-// GET  /api/webhooks/instagram (verification)
-// ============================================
-
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getInstagramProfile, verifyWebhook } from '@/lib/instagram';
 import { processIncomingMessage, logAnalyticsEvent } from '@/lib/automation-engine';
 import type { IGWebhookEvent, IGMessagingEvent, IGChangeEvent } from '@/types';
 import { attachmentsFromWebhook, describeAttachments } from '@/lib/attachments';
+import { labelConversation } from '@/lib/ai-labels';
 
 // ── Webhook Verification (GET) ──
 export async function GET(request: NextRequest) {
@@ -160,6 +155,9 @@ async function handleMessagingEvent(event: IGMessagingEvent, igAccountId: string
 
   // Echoes stop here: no analytics as "received", no automation
   if (isEcho) return;
+  
+  // Tag the conversation with AI after the response is sent, so Meta isn't kept waiting
+  after(() => labelConversation(conversation.id));
 
   // 4. Log analytics
   await logAnalyticsEvent(business.id, 'message_received', {

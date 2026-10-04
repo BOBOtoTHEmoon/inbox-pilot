@@ -31,6 +31,9 @@ export interface Conversation {
     last_message_preview: string;
   last_sender_type?: 'customer' | 'bot' | 'human' | null;
   last_customer_message_at?: string | null;
+    ai_label?: 'ready_to_buy' | 'interested' | 'support' | 'browsing' | null;
+  ai_summary?: string | null;
+  ai_labeled_at?: string | null; 
   is_read: boolean;
   tags: string[];
   customer_email: string | null;

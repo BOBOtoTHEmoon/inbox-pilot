@@ -60,6 +60,32 @@ export default function InboxPage() {
     return () => clearInterval(timer);
   }, []);
 
+    // Ask the AI to tag conversations that have no label yet (for example, just imported).
+  // Runs once per visit; new messages are tagged as they arrive.
+  const labelled = useRef(false);
+  useEffect(() => {
+    if (!isSupabaseConfigured || loading || labelled.current) return;
+    const needsLabel = conversations.some(
+      (c) =>
+        c.status !== 'closed' &&
+        c.last_customer_message_at &&
+        (!c.ai_labeled_at || new Date(c.ai_labeled_at) < new Date(c.last_customer_message_at))
+    );
+    if (!needsLabel) return;
+    labelled.current = true;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      fetch('/api/ai/label', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${data.session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ businessId: BUSINESS_ID }),
+      }).catch(() => {});
+    })();
+  }, [conversations, loading]);
+
   // Which Instagram account this inbox belongs to
   useEffect(() => {
     if (!isSupabaseConfigured) return;

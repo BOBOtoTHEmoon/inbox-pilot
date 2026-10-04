@@ -39,3 +39,8 @@ export function dayLabel(date: string | number | Date, now: number = Date.now())
 export function clockTime(date: string | number | Date): string {
   return new Date(date).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
+// "just now", "5m ago", "3h ago"
+export function timeAgo(date: string | number | Date, now: number = Date.now()): string {
+  const short = shortTime(date, now);
+  return short === 'now' ? 'just now' : `${short} ago`;
+}

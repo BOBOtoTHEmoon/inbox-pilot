@@ -13,7 +13,7 @@ import { SalePanel, type SaleResult } from '@/components/sales/SalePanel';
 import { SaleDone } from '@/components/sales/SaleDone';
 import { supabase } from '@/lib/supabase';
 import { VariantPicker } from '@/components/sales/VariantPicker';
-import { shortTime } from '@/lib/time';
+import { shortTime, timeAgo } from '@/lib/time';
 import {
   SAMPLE_CUSTOMERS,
   SAMPLE_PRODUCTS,
@@ -456,7 +456,7 @@ function LiveCatalog({ catalog }: { catalog: ReturnType<typeof useCatalog> }) {
               {syncing
                 ? 'Refreshing from Shopify...'
                 : connection?.last_synced_at
-                ? `Stock updated ${shortTime(connection.last_synced_at)} ago`
+                              ? `Stock updated ${timeAgo(connection.last_synced_at)}`
                 : 'Not refreshed yet'}
             </span>
             <button

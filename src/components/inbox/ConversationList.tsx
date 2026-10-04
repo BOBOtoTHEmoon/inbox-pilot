@@ -2,7 +2,7 @@
 
 import { clsx } from 'clsx';
 import type { Conversation } from '@/types';
-import { getConversationLabel, getReplyWindow, type InboxFilter } from '@/lib/labels';
+import { AI_LABELS, getConversationLabel, getReplyWindow, type InboxFilter } from '@/lib/labels';
 import { shortTime, quietFor } from '@/lib/time';
 import { Avatar } from './Avatar';
 
@@ -139,12 +139,19 @@ export function ConversationList({
                   {conv.last_message_preview || 'No messages yet'}
                 </p>
 
-                {/* What this conversation needs */}
-                {label?.key === 'needs_reply' && <ReplyWindowBar conv={conv} now={now} />}
-                {label?.key === 'follow_up' && (
-                  <p className="mt-2 text-xs text-warning">
-                    Quiet for {quietFor(conv.last_message_at, now)}
-                  </p>
+                                {/* What this conversation needs, and what the AI thinks they want */}
+                {(conv.ai_label || label?.key === 'needs_reply' || label?.key === 'follow_up') && (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    {conv.ai_label && AI_LABELS[conv.ai_label] && (
+                      <span className={clsx('rounded px-1.5 py-0.5 text-[11px] font-semibold', AI_LABELS[conv.ai_label].className)}>
+                        {AI_LABELS[conv.ai_label].text}
+                      </span>
+                    )}
+                    {label?.key === 'needs_reply' && <ReplyWindowBar conv={conv} now={now} />}
+                    {label?.key === 'follow_up' && (
+                      <span className="text-xs text-warning">Quiet for {quietFor(conv.last_message_at, now)}</span>
+                    )}
+                  </div>
                 )}
               </div>
             </button>
@@ -160,11 +167,11 @@ function ReplyWindowBar({ conv, now }: { conv: Conversation; now: number }) {
   const w = getReplyWindow(conv, now);
 
   if (w.closed) {
-    return <p className="mt-2 text-xs text-ink-faint">{w.text}</p>;
+    return <span className="text-xs text-ink-faint">{w.text}</span>;
   }
 
   return (
-    <div className="mt-2 flex items-center gap-2">
+    <div className="flex items-center gap-2">
       <div className="h-1 w-14 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
         <div
           className={clsx('h-full rounded-full', BAR_TONE[w.tone])}
